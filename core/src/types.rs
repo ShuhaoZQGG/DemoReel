@@ -193,3 +193,102 @@ pub struct SmoothedPoint {
     pub timestamp_ms: u64,
     pub velocity: f64,
 }
+
+/// Background configuration for the video canvas.
+///
+/// Uses a type string + fields pattern for FFI compatibility.
+/// `bg_type`: "solid", "gradient", or "transparent"
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct BackgroundConfig {
+    pub bg_type: String,
+    pub hex: String,
+    pub gradient_from_hex: String,
+    pub gradient_to_hex: String,
+    pub gradient_angle_degrees: f64,
+}
+
+impl Default for BackgroundConfig {
+    fn default() -> Self {
+        BackgroundConfig {
+            bg_type: "solid".to_string(),
+            hex: "#1a1a2e".to_string(),
+            gradient_from_hex: "#667eea".to_string(),
+            gradient_to_hex: "#764ba2".to_string(),
+            gradient_angle_degrees: 135.0,
+        }
+    }
+}
+
+/// Aspect ratio for the output video.
+///
+/// Values: "landscape_16x9", "square_1x1", "portrait_9x16", "auto"
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct AspectRatioConfig {
+    pub ratio: String,
+}
+
+impl Default for AspectRatioConfig {
+    fn default() -> Self {
+        AspectRatioConfig {
+            ratio: "landscape_16x9".to_string(),
+        }
+    }
+}
+
+impl AspectRatioConfig {
+    pub fn aspect_value(&self) -> Option<f64> {
+        match self.ratio.as_str() {
+            "landscape_16x9" => Some(16.0 / 9.0),
+            "square_1x1" => Some(1.0),
+            "portrait_9x16" => Some(9.0 / 16.0),
+            "landscape_4x3" => Some(4.0 / 3.0),
+            _ => None, // "auto" — use source aspect
+        }
+    }
+}
+
+/// Full style configuration for the video output.
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct StyleConfig {
+    pub background: BackgroundConfig,
+    pub padding: f64,
+    pub corner_radius: f64,
+    pub shadow_enabled: bool,
+    pub shadow_intensity: f64,
+    pub aspect_ratio: AspectRatioConfig,
+}
+
+impl Default for StyleConfig {
+    fn default() -> Self {
+        StyleConfig {
+            background: BackgroundConfig::default(),
+            padding: 32.0,
+            corner_radius: 12.0,
+            shadow_enabled: true,
+            shadow_intensity: 0.5,
+            aspect_ratio: AspectRatioConfig::default(),
+        }
+    }
+}
+
+/// Cursor rendering configuration.
+///
+/// `cursor_style`: "system", "circle", or "hidden"
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct CursorConfig {
+    pub cursor_style: String,
+    pub size_multiplier: f64,
+    pub click_highlight: bool,
+    pub highlight_color_hex: String,
+}
+
+impl Default for CursorConfig {
+    fn default() -> Self {
+        CursorConfig {
+            cursor_style: "circle".to_string(),
+            size_multiplier: 1.0,
+            click_highlight: true,
+            highlight_color_hex: "#3b82f6".to_string(),
+        }
+    }
+}

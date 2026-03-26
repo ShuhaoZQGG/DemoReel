@@ -1,7 +1,7 @@
 import SwiftUI
 import DemoReelCore
 
-/// Main editor layout: preview on top, timeline below, controls in sidebar.
+/// Main editor layout: preview on top, timeline below, tabbed controls in sidebar.
 struct EditorView: View {
     @Bindable var appState: AppState
     @State private var keyframes: [ZoomKeyframe] = []
@@ -9,6 +9,15 @@ struct EditorView: View {
     @State private var currentTime: Double = 0
     @State private var isPlaying = false
     @State private var zoomConfig = defaultZoomConfig()
+    @State private var styleConfig = defaultStyleConfig()
+    @State private var cursorConfig = defaultCursorConfig()
+    @State private var selectedTab = SidebarTab.zoom
+
+    enum SidebarTab: String, CaseIterable {
+        case zoom = "Zoom"
+        case style = "Style"
+        case cursor = "Cursor"
+    }
 
     var body: some View {
         HSplitView {
@@ -19,7 +28,9 @@ struct EditorView: View {
                     smoothedPoints: smoothedPoints,
                     currentTime: $currentTime,
                     isPlaying: $isPlaying,
-                    zoomConfig: zoomConfig
+                    zoomConfig: zoomConfig,
+                    styleConfig: styleConfig,
+                    cursorConfig: cursorConfig
                 )
                 .frame(minHeight: 300)
 
@@ -34,13 +45,30 @@ struct EditorView: View {
                 .frame(height: 120)
             }
 
-            ZoomConfigPanel(
-                config: $zoomConfig,
-                onRegenerate: regenerateKeyframes
-            )
-            .frame(width: 260)
+            VStack(spacing: 0) {
+                Picker("", selection: $selectedTab) {
+                    ForEach(SidebarTab.allCases, id: \.self) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(8)
+
+                switch selectedTab {
+                case .zoom:
+                    ZoomConfigPanel(
+                        config: $zoomConfig,
+                        onRegenerate: regenerateKeyframes
+                    )
+                case .style:
+                    StylePanel(config: $styleConfig)
+                case .cursor:
+                    CursorPanel(config: $cursorConfig)
+                }
+            }
+            .frame(width: 280)
         }
-        .frame(minWidth: 900, minHeight: 600)
+        .frame(minWidth: 960, minHeight: 640)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Export") {
@@ -177,6 +205,5 @@ struct ZoomConfigPanel: View {
             .buttonStyle(.borderedProminent)
         }
         .formStyle(.grouped)
-        .padding(.vertical, 8)
     }
 }

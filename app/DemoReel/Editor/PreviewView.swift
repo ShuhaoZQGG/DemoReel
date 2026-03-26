@@ -2,7 +2,7 @@ import SwiftUI
 import AVFoundation
 import DemoReelCore
 
-/// Video preview with zoom transform applied based on current keyframes.
+/// Video preview with zoom, style, and cursor rendering applied in real-time.
 struct PreviewView: View {
     let videoURL: URL?
     let keyframes: [ZoomKeyframe]
@@ -10,33 +10,40 @@ struct PreviewView: View {
     @Binding var currentTime: Double
     @Binding var isPlaying: Bool
     let zoomConfig: ZoomConfig
+    let styleConfig: StyleConfig
+    let cursorConfig: CursorConfig
 
     @State private var player: AVPlayer?
     @State private var timeObserver: Any?
 
     var body: some View {
-        ZStack {
-            Color.black
+        GeometryReader { geo in
+            ZStack {
+                // Background
+                backgroundView
+                    .frame(width: geo.size.width, height: geo.size.height)
 
-            if let player {
-                VideoPlayerView(player: player)
-                    .scaleEffect(currentScale)
-                    .animation(.easeInOut(duration: 0.05), value: currentScale)
-
-                // Cursor overlay
-                if let point = currentCursorPoint {
-                    Circle()
-                        .fill(.white.opacity(0.8))
-                        .frame(width: 12, height: 12)
-                        .shadow(color: .black.opacity(0.3), radius: 2)
-                        .position(
-                            x: point.x,
-                            y: point.y
+                if let player {
+                    // Video frame with styling
+                    VideoPlayerView(player: player)
+                        .clipShape(RoundedRectangle(cornerRadius: styleConfig.cornerRadius))
+                        .shadow(
+                            color: .black.opacity(styleConfig.shadowEnabled ? styleConfig.shadowIntensity * 0.6 : 0),
+                            radius: styleConfig.shadowEnabled ? 20 * styleConfig.shadowIntensity : 0,
+                            y: styleConfig.shadowEnabled ? 10 * styleConfig.shadowIntensity : 0
                         )
+                        .scaleEffect(currentScale)
+                        .animation(.easeInOut(duration: 0.05), value: currentScale)
+                        .padding(styleConfig.padding)
+
+                    // Cursor overlay
+                    if cursorConfig.cursorStyle != "hidden", let point = currentCursorPoint {
+                        cursorOverlay(at: point, in: geo.size)
+                    }
+                } else {
+                    Text("No video loaded")
+                        .foregroundStyle(.secondary)
                 }
-            } else {
-                Text("No video loaded")
-                    .foregroundStyle(.secondary)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -62,6 +69,80 @@ struct PreviewView: View {
         }
         .onDisappear {
             removeTimeObserver()
+        }
+    }
+
+    @ViewBuilder
+    private var backgroundView: some View {
+        switch styleConfig.background.bgType {
+        case "gradient":
+            LinearGradient(
+                colors: [
+                    Color(hex: styleConfig.background.gradientFromHex),
+                    Color(hex: styleConfig.background.gradientToHex),
+                ],
+                startPoint: gradientStart,
+                endPoint: gradientEnd
+            )
+        case "transparent":
+            // Checkerboard pattern to indicate transparency
+            Canvas { context, size in
+                let cellSize: CGFloat = 10
+                for row in 0..<Int(size.height / cellSize) + 1 {
+                    for col in 0..<Int(size.width / cellSize) + 1 {
+                        let isLight = (row + col) % 2 == 0
+                        context.fill(
+                            Path(CGRect(
+                                x: CGFloat(col) * cellSize,
+                                y: CGFloat(row) * cellSize,
+                                width: cellSize,
+                                height: cellSize
+                            )),
+                            with: .color(isLight ? .white.opacity(0.3) : .gray.opacity(0.3))
+                        )
+                    }
+                }
+            }
+        default: // "solid"
+            Color(hex: styleConfig.background.hex)
+        }
+    }
+
+    private var gradientStart: UnitPoint {
+        let angle = styleConfig.background.gradientAngleDegrees
+        let rad = angle * .pi / 180.0
+        return UnitPoint(x: 0.5 - cos(rad) * 0.5, y: 0.5 - sin(rad) * 0.5)
+    }
+
+    private var gradientEnd: UnitPoint {
+        let angle = styleConfig.background.gradientAngleDegrees
+        let rad = angle * .pi / 180.0
+        return UnitPoint(x: 0.5 + cos(rad) * 0.5, y: 0.5 + sin(rad) * 0.5)
+    }
+
+    @ViewBuilder
+    private func cursorOverlay(at point: SmoothedPoint, in size: CGSize) -> some View {
+        let baseSize = 12.0 * cursorConfig.sizeMultiplier
+
+        if cursorConfig.cursorStyle == "circle" {
+            ZStack {
+                if cursorConfig.clickHighlight {
+                    Circle()
+                        .fill(Color(hex: cursorConfig.highlightColorHex).opacity(0.25))
+                        .frame(width: baseSize * 2.5, height: baseSize * 2.5)
+                }
+                Circle()
+                    .fill(.white.opacity(0.9))
+                    .frame(width: baseSize, height: baseSize)
+                    .shadow(color: .black.opacity(0.3), radius: 2)
+            }
+            .position(x: point.x, y: point.y)
+        } else if cursorConfig.cursorStyle == "system" {
+            Image(systemName: "cursorarrow")
+                .font(.system(size: 16 * cursorConfig.sizeMultiplier))
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.5), radius: 1)
+                .position(x: point.x, y: point.y)
         }
     }
 

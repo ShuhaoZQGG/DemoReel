@@ -5,7 +5,10 @@ pub mod project;
 pub mod types;
 pub mod zoom;
 
-use types::{EventLog, EventLogRecord, MouseEvent, SmoothedPoint, ZoomConfig, ZoomKeyframe};
+use types::{
+    CursorConfig, EventLog, EventLogRecord, MouseEvent, SmoothedPoint, StyleConfig, ZoomConfig,
+    ZoomKeyframe,
+};
 
 uniffi::setup_scaffolding!();
 
@@ -65,6 +68,36 @@ pub fn mouse_events_from_log(json: String) -> Result<Vec<MouseEvent>, String> {
 #[uniffi::export]
 pub fn default_zoom_config() -> ZoomConfig {
     ZoomConfig::default()
+}
+
+/// Return the default style configuration.
+#[uniffi::export]
+pub fn default_style_config() -> StyleConfig {
+    StyleConfig::default()
+}
+
+/// Return the default cursor configuration.
+#[uniffi::export]
+pub fn default_cursor_config() -> CursorConfig {
+    CursorConfig::default()
+}
+
+/// Compute output canvas dimensions given source size and style config.
+#[uniffi::export]
+pub fn compute_output_dimensions(
+    source_width: u32,
+    source_height: u32,
+    style: StyleConfig,
+) -> Vec<u32> {
+    let (w, h) = compositor::compute_output_dimensions(source_width, source_height, &style);
+    vec![w, h]
+}
+
+/// Parse a hex color string into [r, g, b, a] components.
+#[uniffi::export]
+pub fn parse_hex_color(hex: String) -> Result<Vec<u8>, String> {
+    let (r, g, b, a) = compositor::parse_hex_color(&hex)?;
+    Ok(vec![r, g, b, a])
 }
 
 #[cfg(test)]
