@@ -11,35 +11,35 @@ struct PreviewView: View {
     let zoomConfig: ZoomConfig
     let styleConfig: StyleConfig
     let cursorConfig: CursorConfig
+    let videoWidth: Double
+    let videoHeight: Double
 
     @State private var player: AVPlayer?
     @State private var timeObserver: Any?
 
-    var body: some View {
+    var body: some View { 
         GeometryReader { geo in
             ZStack {
                 // Background — fills any area not covered by the video
                 backgroundView
 
                 if let player {
-                    // Video frame with styling, on top of background
-                    VideoPlayerView(player: player)
+                    // Video and cursor in same coordinate space.
+                    // Both are sized by the same GeometryReader and
+                    // transformed by the same scaleEffect.
+                    videoWithCursor(player: player, containerSize: geo.size)
                         .clipShape(RoundedRectangle(cornerRadius: styleConfig.cornerRadius))
                         .shadow(
                             color: .black.opacity(styleConfig.shadowEnabled ? styleConfig.shadowIntensity * 0.6 : 0),
                             radius: styleConfig.shadowEnabled ? 20 * styleConfig.shadowIntensity : 0,
                             y: styleConfig.shadowEnabled ? 10 * styleConfig.shadowIntensity : 0
                         )
-                        .scaleEffect(currentScale)
-                        .animation(.easeInOut(duration: 0.05), value: currentScale)
+                        .scaleEffect(currentScale, anchor: currentZoomAnchor)
+                        .animation(.easeInOut(duration: 0.3), value: currentScale)
+                        .animation(.easeInOut(duration: 0.3), value: currentZoomAnchor.x)
+                        .animation(.easeInOut(duration: 0.3), value: currentZoomAnchor.y)
                         .padding(styleConfig.padding)
                         .zIndex(1)
-
-                    // Cursor overlay
-                    if cursorConfig.cursorStyle != "hidden", let point = currentCursorPoint {
-                        cursorOverlay(at: point, in: geo.size)
-                            .zIndex(2)
-                    }
                 } else {
                     Text("No video loaded")
                         .foregroundStyle(.secondary)
@@ -121,6 +121,81 @@ struct PreviewView: View {
         return UnitPoint(x: 0.5 + cos(rad) * 0.5, y: 0.5 + sin(rad) * 0.5)
     }
 
+    /// Video and cursor composited together. The cursor is drawn as a Canvas
+    /// that shares the exact same frame as the video, so they always move together.
+    @ViewBuilder
+    private func videoWithCursor(player: AVPlayer, containerSize: CGSize) -> some View {
+        // Use the video's aspect ratio to determine the actual rendered size
+        let padding = styleConfig.padding
+        let availW = containerSize.width - padding * 2
+        let availH = containerSize.height - padding * 2
+        let videoAspect = videoWidth / max(videoHeight, 1)
+        let viewAspect = availW / max(availH, 1)
+        let renderW = videoAspect > viewAspect ? availW : availH * videoAspect
+        let renderH = videoAspect > viewAspect ? availW / videoAspect : availH
+
+        ZStack {
+            VideoPlayerView(player: player)
+            cursorCanvasView
+        }
+        .frame(width: renderW, height: renderH)
+    }
+
+    /// Canvas that draws the cursor at fractional position within its bounds.
+    @ViewBuilder
+    private var cursorCanvasView: some View {
+        if cursorConfig.cursorStyle != "hidden", let point = currentCursorPoint {
+            let fracX = point.x / max(videoWidth, 1)
+            let fracY = point.y / max(videoHeight, 1)
+            let baseSize = 12.0 * cursorConfig.sizeMultiplier
+
+            Canvas { context, size in
+                let x = fracX * size.width
+                let y = fracY * size.height
+
+                if cursorConfig.cursorStyle == "circle" {
+                    if cursorConfig.clickHighlight {
+                        let highlightSize = baseSize * 2.5
+                        let highlightRect = CGRect(
+                            x: x - highlightSize / 2, y: y - highlightSize / 2,
+                            width: highlightSize, height: highlightSize
+                        )
+                        context.fill(
+                            Path(ellipseIn: highlightRect),
+                            with: .color(Color(hex: cursorConfig.highlightColorHex).opacity(0.25))
+                        )
+                    }
+                    let dotRect = CGRect(
+                        x: x - baseSize / 2, y: y - baseSize / 2,
+                        width: baseSize, height: baseSize
+                    )
+                    context.fill(
+                        Path(ellipseIn: dotRect),
+                        with: .color(.white.opacity(0.9))
+                    )
+                } else if cursorConfig.cursorStyle == "system" {
+                    // Draw system cursor image
+                    let cursorImage = NSCursor.arrow.image
+                    let cursorSize = CGSize(
+                        width: cursorImage.size.width * cursorConfig.sizeMultiplier,
+                        height: cursorImage.size.height * cursorConfig.sizeMultiplier
+                    )
+                    let hotSpot = NSCursor.arrow.hotSpot
+                    let drawRect = CGRect(
+                        x: x - hotSpot.x * cursorConfig.sizeMultiplier,
+                        y: y - hotSpot.y * cursorConfig.sizeMultiplier,
+                        width: cursorSize.width,
+                        height: cursorSize.height
+                    )
+                    context.draw(
+                        Image(nsImage: cursorImage),
+                        in: drawRect
+                    )
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private func cursorOverlay(at point: SmoothedPoint, in size: CGSize) -> some View {
         let baseSize = 12.0 * cursorConfig.sizeMultiplier
@@ -144,6 +219,32 @@ struct PreviewView: View {
         }
     }
 
+    /// Compute the rect where the video renders within the given size (aspect-fit, centered).
+    /// No padding — this is for the inner ZStack before padding is applied.
+    private func videoDisplayRect(in size: CGSize) -> CGRect {
+        guard videoWidth > 0, videoHeight > 0, size.width > 0, size.height > 0 else {
+            return CGRect(origin: .zero, size: size)
+        }
+
+        let videoAspect = videoWidth / videoHeight
+        let viewAspect = size.width / size.height
+
+        let displayWidth: CGFloat
+        let displayHeight: CGFloat
+
+        if videoAspect > viewAspect {
+            displayWidth = size.width
+            displayHeight = size.width / videoAspect
+        } else {
+            displayHeight = size.height
+            displayWidth = size.height * videoAspect
+        }
+
+        let x = (size.width - displayWidth) / 2
+        let y = (size.height - displayHeight) / 2
+        return CGRect(x: x, y: y, width: displayWidth, height: displayHeight)
+    }
+
     private var currentScale: Double {
         let timestampMs = UInt64(currentTime * 1000)
         return zoomScaleAt(
@@ -151,6 +252,19 @@ struct PreviewView: View {
             timestampMs: timestampMs,
             config: zoomConfig
         )
+    }
+
+    /// The anchor point for the zoom effect — zooms toward the click position.
+    private var currentZoomAnchor: UnitPoint {
+        let timestampMs = UInt64(currentTime * 1000)
+        let center = zoomCenterAt(keyframes: keyframes, timestampMs: timestampMs)
+        guard center.count == 2, videoWidth > 0, videoHeight > 0 else {
+            return .center
+        }
+        // Normalize click position to 0..1 range within the video frame
+        let anchorX = (center[0] / videoWidth).clamped(to: 0...1)
+        let anchorY = (center[1] / videoHeight).clamped(to: 0...1)
+        return UnitPoint(x: anchorX, y: anchorY)
     }
 
     private var currentCursorPoint: SmoothedPoint? {
@@ -253,5 +367,11 @@ struct VideoPlayerView: NSViewRepresentable {
         required init?(coder: NSCoder) {
             fatalError()
         }
+    }
+}
+
+private extension Double {
+    func clamped(to range: ClosedRange<Double>) -> Double {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }

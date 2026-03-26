@@ -15,7 +15,7 @@ struct TimelineView: View {
         max(duration * pixelsPerSecond, 1)
     }
 
-    var body: some View {
+    var body: some View { 
         VStack(spacing: 0) {
             // Transport controls
             HStack {

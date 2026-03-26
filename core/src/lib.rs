@@ -41,6 +41,17 @@ pub fn zoom_scale_at(keyframes: Vec<ZoomKeyframe>, timestamp_ms: u64, config: Zo
     zoom::zoom_scale_at(&keyframes, timestamp_ms, &config)
 }
 
+/// Get the zoom center position at a given timestamp.
+///
+/// Returns [x, y] of the active keyframe center, or empty vec if no active keyframe.
+#[uniffi::export]
+pub fn zoom_center_at(keyframes: Vec<ZoomKeyframe>, timestamp_ms: u64) -> Vec<f64> {
+    match zoom::zoom_center_at(&keyframes, timestamp_ms) {
+        Some((x, y)) => vec![x, y],
+        None => vec![],
+    }
+}
+
 /// Smooth a raw cursor path using exponential moving average.
 ///
 /// `alpha` controls smoothing: 0.0 = very smooth, 1.0 = no smoothing.

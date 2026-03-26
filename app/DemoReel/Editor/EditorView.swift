@@ -14,6 +14,8 @@ struct EditorView: View {
     @State private var showExportSheet = false
     @State private var trimStart: Double = 0
     @State private var trimEnd: Double = 0
+    @State private var videoWidth: Double = 0
+    @State private var videoHeight: Double = 0
 
     enum SidebarTab: String, CaseIterable {
         case zoom = "Zoom"
@@ -32,7 +34,9 @@ struct EditorView: View {
                     isPlaying: $isPlaying,
                     zoomConfig: zoomConfig,
                     styleConfig: styleConfig,
-                    cursorConfig: cursorConfig
+                    cursorConfig: cursorConfig,
+                    videoWidth: videoWidth,
+                    videoHeight: videoHeight
                 )
                 .frame(minHeight: 300)
 
@@ -118,6 +122,12 @@ struct EditorView: View {
         guard let eventsPath = appState.eventsPath else { return }
         guard let json = try? String(contentsOf: eventsPath, encoding: .utf8) else { return }
         guard let mouseEvents = try? mouseEventsFromLog(json: json) else { return }
+
+        // Extract video dimensions from event log
+        if let record = try? parseEventLog(json: json) {
+            videoWidth = Double(record.screenWidth)
+            videoHeight = Double(record.screenHeight)
+        }
 
         keyframes = generateZoomKeyframesWithConfig(
             events: mouseEvents,

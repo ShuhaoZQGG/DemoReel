@@ -17,7 +17,7 @@ final class ExportManager: ExportCallback {
     }
 
     func onProgress(progress: ExportProgress) {
-        onProgressHandler(progress)
+        onProgressHandler(progress)   
     }
 
     func onComplete(outputPath: String) {

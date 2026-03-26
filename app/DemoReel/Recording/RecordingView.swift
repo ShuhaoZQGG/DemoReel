@@ -12,6 +12,7 @@ struct RecordingView: View {
     @State private var elapsedSeconds: Int = 0
     @State private var errorMessage: String?
     @State private var hasAccessibilityPermission = false
+    @State private var overlayPanel: RecordingOverlayPanel?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -149,7 +150,15 @@ struct RecordingView: View {
                 .appendingPathComponent("\(recordingId).mov")
 
             try await recorder.startRecording(filter: filter, outputURL: videoURL)
-            eventLogger.startLogging()
+
+            // captureRect.origin is already in Quartz screen coords (top-left origin),
+            // confirmed by matching CGWindowList kCGWindowBounds values.
+            // Use it directly — no coordinate conversion needed.
+            let mainScreenHeight = NSScreen.main?.frame.height ?? 0
+            eventLogger.startLogging(
+                windowQuartzOrigin: recorder.captureRect.origin,
+                screenHeight: mainScreenHeight
+            )
             audioCapture.start()
 
             elapsedSeconds = 0
@@ -159,8 +168,9 @@ struct RecordingView: View {
 
             appState.isRecording = true
 
-            // Bring window back to show recording controls
-            NSApplication.shared.activate(ignoringOtherApps: true)
+            // Hide main window, show floating overlay instead
+            NSApplication.shared.mainWindow?.orderOut(nil)
+            showOverlay()
         } catch {
             errorMessage = error.localizedDescription
             NSApplication.shared.activate(ignoringOtherApps: true)
@@ -170,6 +180,7 @@ struct RecordingView: View {
     private func stopRecording() async {
         timer?.invalidate()
         timer = nil
+        dismissOverlay()
 
         eventLogger.stopLogging()
         audioCapture.stop()
@@ -183,6 +194,7 @@ struct RecordingView: View {
 
             let durationMs = UInt64(elapsedSeconds) * 1000
             let captureRect = recorder.captureRect
+
             try eventLogger.save(
                 to: eventsURL,
                 recordingId: recordingId,
@@ -195,6 +207,12 @@ struct RecordingView: View {
             appState.eventsPath = eventsURL
             appState.isRecording = false
             appState.recordingDuration = TimeInterval(elapsedSeconds)
+
+            // Show main window and switch to editor
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            for window in NSApplication.shared.windows where window !== overlayPanel {
+                window.makeKeyAndOrderFront(nil)
+            }
             appState.currentScreen = .editor
         } catch {
             errorMessage = error.localizedDescription
@@ -205,6 +223,26 @@ struct RecordingView: View {
         let minutes = elapsedSeconds / 60
         let seconds = elapsedSeconds % 60
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+
+    // MARK: - Floating overlay
+
+    private func showOverlay() {
+        let overlayView = RecordingOverlayView(
+            elapsedSeconds: $elapsedSeconds,
+            onStop: { Task { await stopRecording() } }
+        )
+        let hostingView = NSHostingView(rootView: overlayView)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 220, height: 44)
+
+        let panel = RecordingOverlayPanel(contentView: hostingView)
+        panel.orderFront(nil)
+        overlayPanel = panel
+    }
+
+    private func dismissOverlay() {
+        overlayPanel?.orderOut(nil)
+        overlayPanel = nil
     }
 
     // MARK: - Accessibility permission

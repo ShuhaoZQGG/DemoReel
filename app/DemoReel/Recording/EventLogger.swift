@@ -10,6 +10,10 @@ final class EventLogger {
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var recordingStartTime: UInt64 = 0
+    /// Window origin in Quartz screen coordinates (top-left origin)
+    private var windowOriginQuartz: CGPoint = .zero
+    /// Main screen height for converting AppKit→Quartz Y
+    private var screenHeight: CGFloat = 0
 
     struct RecordedEvent: Codable {
         let type: String
@@ -35,10 +39,16 @@ final class EventLogger {
         }
     }
 
-    /// Start capturing mouse events from all apps.
-    func startLogging() {
+    /// Start capturing mouse events, converting to window-relative coordinates.
+    /// - Parameters:
+    ///   - windowQuartzOrigin: The window's top-left corner in Quartz screen coords
+    ///     (from kCGWindowBounds, which uses top-left origin).
+    ///   - screenHeight: Height of the main screen (for AppKit→Quartz Y conversion).
+    func startLogging(windowQuartzOrigin: CGPoint = .zero, screenHeight: CGFloat = 0) {
         guard !isLogging else { return }
 
+        self.windowOriginQuartz = windowQuartzOrigin
+        self.screenHeight = screenHeight
         events = []
         recordingStartTime = mach_absolute_time()
 
@@ -51,12 +61,10 @@ final class EventLogger {
             .rightMouseDragged,
         ]
 
-        // Monitor events in OTHER applications
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
             self?.handleNSEvent(event)
         }
 
-        // Monitor events in THIS application (DemoReel)
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
             self?.handleNSEvent(event)
             return event
@@ -103,38 +111,31 @@ final class EventLogger {
     }
 
     private func handleNSEvent(_ event: NSEvent) {
-        // NSEvent.mouseLocation uses bottom-left origin (AppKit convention).
-        // Convert to top-left origin to match video coordinate system.
+        // NSEvent.mouseLocation: AppKit screen coords (bottom-left origin)
         let mouseLocation = NSEvent.mouseLocation
-        let screenHeight = NSScreen.main?.frame.height ?? 0
-        let x = mouseLocation.x
-        let y = screenHeight - mouseLocation.y
+
+        // Convert to Quartz screen coords (top-left origin)
+        let quartzX = mouseLocation.x
+        let quartzY = screenHeight - mouseLocation.y
+
+        // Convert to window-relative coords (0,0 = window top-left)
+        let x = quartzX - windowOriginQuartz.x
+        let y = quartzY - windowOriginQuartz.y
 
         let timestampMs = elapsedMs()
 
         switch event.type {
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged:
             events.append(RecordedEvent(
-                type: "move",
-                x: x,
-                y: y,
-                ts: timestampMs,
-                delta_y: nil
+                type: "move", x: x, y: y, ts: timestampMs, delta_y: nil
             ))
         case .leftMouseDown, .rightMouseDown:
             events.append(RecordedEvent(
-                type: "click",
-                x: x,
-                y: y,
-                ts: timestampMs,
-                delta_y: nil
+                type: "click", x: x, y: y, ts: timestampMs, delta_y: nil
             ))
         case .scrollWheel:
             events.append(RecordedEvent(
-                type: "scroll",
-                x: x,
-                y: y,
-                ts: timestampMs,
+                type: "scroll", x: x, y: y, ts: timestampMs,
                 delta_y: Double(event.scrollingDeltaY)
             ))
         default:

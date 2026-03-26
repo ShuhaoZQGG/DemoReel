@@ -367,6 +367,11 @@ void uniffi_demoreel_core_fn_func_save_project(RustBuffer project, RustBuffer pa
 RustBuffer uniffi_demoreel_core_fn_func_smooth_cursor_path(RustBuffer positions, double alpha, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_DEMOREEL_CORE_FN_FUNC_ZOOM_CENTER_AT
+#define UNIFFI_FFIDEF_UNIFFI_DEMOREEL_CORE_FN_FUNC_ZOOM_CENTER_AT
+RustBuffer uniffi_demoreel_core_fn_func_zoom_center_at(RustBuffer keyframes, uint64_t timestamp_ms, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_DEMOREEL_CORE_FN_FUNC_ZOOM_SCALE_AT
 #define UNIFFI_FFIDEF_UNIFFI_DEMOREEL_CORE_FN_FUNC_ZOOM_SCALE_AT
 double uniffi_demoreel_core_fn_func_zoom_scale_at(RustBuffer keyframes, uint64_t timestamp_ms, RustBuffer config, RustCallStatus *_Nonnull out_status
@@ -739,6 +744,12 @@ uint16_t uniffi_demoreel_core_checksum_func_save_project(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_DEMOREEL_CORE_CHECKSUM_FUNC_SMOOTH_CURSOR_PATH
 #define UNIFFI_FFIDEF_UNIFFI_DEMOREEL_CORE_CHECKSUM_FUNC_SMOOTH_CURSOR_PATH
 uint16_t uniffi_demoreel_core_checksum_func_smooth_cursor_path(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_DEMOREEL_CORE_CHECKSUM_FUNC_ZOOM_CENTER_AT
+#define UNIFFI_FFIDEF_UNIFFI_DEMOREEL_CORE_CHECKSUM_FUNC_ZOOM_CENTER_AT
+uint16_t uniffi_demoreel_core_checksum_func_zoom_center_at(void
     
 );
 #endif

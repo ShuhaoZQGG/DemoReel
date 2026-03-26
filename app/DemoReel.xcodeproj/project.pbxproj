@@ -10,6 +10,7 @@
 		060B78CF2DB3A23BB8BF872E /* ZoomKeyframeEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B099A312D613654F6D3B084 /* ZoomKeyframeEditor.swift */; };
 		0E46E4A5754CA633614D65AC /* StylePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F3CB6CC10C3A51D56C347A8 /* StylePanel.swift */; };
 		13AA182F674961576DCB7C76 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55DAF5A6D283689F246667A6 /* ContentView.swift */; };
+		1E15CF88DB49D5A9618D3BA0 /* RecordingOverlayPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F4978D5C5F66FE363001369 /* RecordingOverlayPanel.swift */; };
 		4B3EABA594A5ACFC941CE540 /* TimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBDA14E0A7DCFE079EC0B578 /* TimelineView.swift */; };
 		5AC8A877F4147EA140183D80 /* AudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF37F4D0A360A3FBE2EC2165 /* AudioCapture.swift */; };
 		60BE27B07798ABFD43A504A6 /* EventLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77821EA51A6E7D9FD1B2AAD9 /* EventLogger.swift */; };
@@ -19,6 +20,7 @@
 		A606CE975A83A084DC82700C /* SourcePickerCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA608C1F70A79110F6A30C84 /* SourcePickerCoordinator.swift */; };
 		AF196859F30BBE74890B81FA /* ExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA51FEBAA10F1CFD4F7EE383 /* ExportSheet.swift */; };
 		BCC7FAE64F65FB28C08D4EFC /* CursorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFF32E808D120C70E6836921 /* CursorPanel.swift */; };
+		D2F303A030DA9CD202BA8FD3 /* RecordingOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD882DCDFC67858E4608DD7A /* RecordingOverlayView.swift */; };
 		E52D59E0E94E2B6254657C44 /* DemoReelCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383C3C1138528350C6D6BFB5 /* DemoReelCore.swift */; };
 		E817796F5990E187809B30FE /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A8D8861618509BE87E0D3A /* RecordingView.swift */; };
 		EF0DF68D31E8CF2D53F09D5E /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A6FA81971BB9558E8413156 /* EditorView.swift */; };
@@ -33,6 +35,7 @@
 		68F935ED02583659A6E20DA3 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		75A8D8861618509BE87E0D3A /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
 		77821EA51A6E7D9FD1B2AAD9 /* EventLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventLogger.swift; sourceTree = "<group>"; };
+		7F4978D5C5F66FE363001369 /* RecordingOverlayPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlayPanel.swift; sourceTree = "<group>"; };
 		83BFDD4820105159572DDDF2 /* PreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewView.swift; sourceTree = "<group>"; };
 		8442CAC3A00230FBB89FD7BA /* ExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManager.swift; sourceTree = "<group>"; };
 		8A6FA81971BB9558E8413156 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
@@ -47,6 +50,7 @@
 		F69960E6E04D9E306FFAA2EE /* ScreenRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenRecorder.swift; sourceTree = "<group>"; };
 		FA51FEBAA10F1CFD4F7EE383 /* ExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportSheet.swift; sourceTree = "<group>"; };
 		FBDA14E0A7DCFE079EC0B578 /* TimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineView.swift; sourceTree = "<group>"; };
+		FD882DCDFC67858E4608DD7A /* RecordingOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlayView.swift; sourceTree = "<group>"; };
 		FF37F4D0A360A3FBE2EC2165 /* AudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCapture.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -80,6 +84,8 @@
 			children = (
 				FF37F4D0A360A3FBE2EC2165 /* AudioCapture.swift */,
 				77821EA51A6E7D9FD1B2AAD9 /* EventLogger.swift */,
+				7F4978D5C5F66FE363001369 /* RecordingOverlayPanel.swift */,
+				FD882DCDFC67858E4608DD7A /* RecordingOverlayView.swift */,
 				75A8D8861618509BE87E0D3A /* RecordingView.swift */,
 				F69960E6E04D9E306FFAA2EE /* ScreenRecorder.swift */,
 				EA608C1F70A79110F6A30C84 /* SourcePickerCoordinator.swift */,
@@ -200,6 +206,8 @@
 				F1D1A3D267F35F65D8D6A79C /* ExportManager.swift in Sources */,
 				AF196859F30BBE74890B81FA /* ExportSheet.swift in Sources */,
 				8C2E4E26B34618B829509BD3 /* PreviewView.swift in Sources */,
+				1E15CF88DB49D5A9618D3BA0 /* RecordingOverlayPanel.swift in Sources */,
+				D2F303A030DA9CD202BA8FD3 /* RecordingOverlayView.swift in Sources */,
 				E817796F5990E187809B30FE /* RecordingView.swift in Sources */,
 				91243C424403D82D1E06679D /* ScreenRecorder.swift in Sources */,
 				A606CE975A83A084DC82700C /* SourcePickerCoordinator.swift in Sources */,

@@ -10,12 +10,12 @@ struct ZoomKeyframeEditor: View {
     @State private var dragOffset: Double = 0
 
     var body: some View {
-        ZStack(alignment: .leading) {
+        ZStack(alignment: .leading) { 
             ForEach(Array(keyframes.enumerated()), id: \.offset) { index, kf in
                 let x = Double(kf.startMs) / 1000.0 * pixelsPerSecond
                 let width = Double(kf.endMs - kf.startMs) / 1000.0 * pixelsPerSecond
 
-                ZStack {
+                ZStack { 
                     RoundedRectangle(cornerRadius: 4)
                         .fill(.blue.opacity(0.25))
                     RoundedRectangle(cornerRadius: 4)
