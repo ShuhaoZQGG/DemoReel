@@ -292,3 +292,62 @@ impl Default for CursorConfig {
         }
     }
 }
+
+/// Output format for export.
+///
+/// Values: "mp4", "gif", "webm"
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct OutputFormatConfig {
+    pub format: String,
+}
+
+impl Default for OutputFormatConfig {
+    fn default() -> Self {
+        OutputFormatConfig {
+            format: "mp4".to_string(),
+        }
+    }
+}
+
+/// Full export configuration.
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct ExportConfig {
+    pub input_video_path: String,
+    pub events_json_path: String,
+    pub output_path: String,
+    pub zoom_config: ZoomConfig,
+    pub style_config: StyleConfig,
+    pub cursor_config: CursorConfig,
+    pub output_width: u32,
+    pub output_height: u32,
+    pub fps: u32,
+    pub format: OutputFormatConfig,
+}
+
+/// Export error type.
+#[derive(uniffi::Error, thiserror::Error, Debug)]
+pub enum ExportError {
+    #[error("FFmpeg not found: {message}")]
+    FfmpegNotFound { message: String },
+    #[error("FFmpeg failed: {message}")]
+    FfmpegFailed { message: String },
+    #[error("IO error: {message}")]
+    IoError { message: String },
+    #[error("Invalid config: {message}")]
+    InvalidConfig { message: String },
+}
+
+impl From<std::io::Error> for ExportError {
+    fn from(err: std::io::Error) -> Self {
+        ExportError::IoError {
+            message: err.to_string(),
+        }
+    }
+}
+
+/// Export progress info passed via callback.
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct ExportProgress {
+    pub percent: f64,
+    pub stage: String,
+}

@@ -12,6 +12,7 @@ struct EditorView: View {
     @State private var styleConfig = defaultStyleConfig()
     @State private var cursorConfig = defaultCursorConfig()
     @State private var selectedTab = SidebarTab.zoom
+    @State private var showExportSheet = false
 
     enum SidebarTab: String, CaseIterable {
         case zoom = "Zoom"
@@ -72,7 +73,7 @@ struct EditorView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Export") {
-                    // Placeholder for M4
+                    showExportSheet = true
                 }
             }
             ToolbarItem(placement: .navigation) {
@@ -80,6 +81,16 @@ struct EditorView: View {
                     appState.currentScreen = .recording
                 }
             }
+        }
+        .sheet(isPresented: $showExportSheet) {
+            ExportSheet(
+                isPresented: $showExportSheet,
+                videoPath: appState.videoPath,
+                eventsPath: appState.eventsPath,
+                zoomConfig: zoomConfig,
+                styleConfig: styleConfig,
+                cursorConfig: cursorConfig
+            )
         }
         .task {
             loadEventsAndGenerate()

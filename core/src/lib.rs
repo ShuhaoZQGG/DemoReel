@@ -6,8 +6,8 @@ pub mod types;
 pub mod zoom;
 
 use types::{
-    CursorConfig, EventLog, EventLogRecord, MouseEvent, SmoothedPoint, StyleConfig, ZoomConfig,
-    ZoomKeyframe,
+    CursorConfig, EventLog, EventLogRecord, ExportConfig, ExportError, ExportProgress, MouseEvent,
+    SmoothedPoint, StyleConfig, ZoomConfig, ZoomKeyframe,
 };
 
 uniffi::setup_scaffolding!();
@@ -98,6 +98,36 @@ pub fn compute_output_dimensions(
 pub fn parse_hex_color(hex: String) -> Result<Vec<u8>, String> {
     let (r, g, b, a) = compositor::parse_hex_color(&hex)?;
     Ok(vec![r, g, b, a])
+}
+
+/// Check if FFmpeg is available on the system.
+#[uniffi::export]
+pub fn check_ffmpeg() -> Result<String, ExportError> {
+    export::find_ffmpeg()
+}
+
+/// Run the video export pipeline.
+///
+/// This is a blocking call that spawns FFmpeg as a subprocess.
+/// Progress is reported via the callback.
+#[uniffi::export(callback_interface)]
+pub trait ExportCallback: Send + Sync {
+    fn on_progress(&self, progress: ExportProgress);
+    fn on_complete(&self, output_path: String);
+    fn on_error(&self, message: String);
+}
+
+/// Start the export pipeline with a callback for progress reporting.
+#[uniffi::export]
+pub fn export_video(config: ExportConfig, callback: Box<dyn ExportCallback>) {
+    let result = export::run_export(&config, |progress| {
+        callback.on_progress(progress);
+    });
+
+    match result {
+        Ok(output_path) => callback.on_complete(output_path),
+        Err(e) => callback.on_error(e.to_string()),
+    }
 }
 
 #[cfg(test)]
