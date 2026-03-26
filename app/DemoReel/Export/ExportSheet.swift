@@ -1,5 +1,4 @@
 import SwiftUI
-import DemoReelCore
 import UniformTypeIdentifiers
 
 /// Export configuration sheet: format picker, resolution, progress bar.

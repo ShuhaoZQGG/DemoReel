@@ -1,5 +1,4 @@
 import SwiftUI
-import DemoReelCore
 
 struct ContentView: View {
     var body: some View {

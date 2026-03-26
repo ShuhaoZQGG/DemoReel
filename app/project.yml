@@ -1,0 +1,54 @@
+name: DemoReel
+options:
+  bundleIdPrefix: com.demoreel
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+targets:
+  DemoReel:
+    type: application
+    platform: macOS
+    sources:
+      - path: DemoReel
+        excludes:
+          - Generated/DemoReelCoreFFI.h
+          - Generated/DemoReelCoreFFI.modulemap
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.demoreel.app
+        CODE_SIGN_ENTITLEMENTS: DemoReel/DemoReel.entitlements
+        LIBRARY_SEARCH_PATHS:
+          - "$(PROJECT_DIR)/../core/target/universal"
+        SWIFT_INCLUDE_PATHS:
+          - "$(PROJECT_DIR)/DemoReel/Generated"
+        OTHER_LDFLAGS:
+          - "-ldemoreel_core"
+        HEADER_SEARCH_PATHS:
+          - "$(PROJECT_DIR)/DemoReel/Generated"
+        OTHER_SWIFT_FLAGS:
+          - "-Xcc"
+          - "-fmodule-map-file=$(PROJECT_DIR)/DemoReel/Generated/DemoReelCoreFFI.modulemap"
+    entitlements:
+      path: DemoReel/DemoReel.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+    info:
+      path: DemoReel/Info.plist
+      properties:
+        CFBundleDisplayName: DemoReel
+        CFBundleShortVersionString: "0.1.0"
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSScreenCaptureUsageDescription: DemoReel needs screen recording permission to capture your screen for demo videos.
+        NSMicrophoneUsageDescription: DemoReel needs microphone access to record audio narration.
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: DemoReel Project
+            CFBundleTypeExtensions:
+              - demoreel
+            CFBundleTypeRole: Editor

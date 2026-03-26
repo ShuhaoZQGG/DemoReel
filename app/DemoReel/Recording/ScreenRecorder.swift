@@ -1,5 +1,8 @@
 import ScreenCaptureKit
 import AVFoundation
+import OSLog
+
+private let log = Logger(subsystem: "com.demoreel.app", category: "ScreenRecorder")
 
 /// Wraps ScreenCaptureKit to record a window or display to a .mov file.
 @Observable
@@ -7,11 +10,15 @@ final class ScreenRecorder: NSObject {
     private(set) var isRecording = false
     private(set) var availableWindows: [SCWindow] = []
     private(set) var availableDisplays: [SCDisplay] = []
+    private(set) var captureRect: CGRect = .zero
 
     private var stream: SCStream?
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
-    private var startTime: CMTime?
+    private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
+    private var firstSampleTime: CMTime?
+    private var sessionStarted = false
+    private let captureQueue = DispatchQueue(label: "com.demoreel.capture", qos: .userInteractive)
 
     /// Refresh the list of capturable windows and displays.
     func refreshAvailableSources() async throws {
@@ -23,39 +30,27 @@ final class ScreenRecorder: NSObject {
         availableDisplays = content.displays
     }
 
+    /// Start recording with an arbitrary content filter (window, display, or region).
+    func startRecording(filter: SCContentFilter, outputURL: URL) async throws {
+        guard !isRecording else { return }
+
+        let rect = try await filter.contentRect
+        captureRect = rect
+        let width = max(Int(rect.size.width) * 2, 640)
+        let height = max(Int(rect.size.height) * 2, 480)
+
+        try await startCapture(filter: filter, width: width, height: height, outputURL: outputURL)
+    }
+
     /// Start recording the specified window to a file.
     func startRecording(window: SCWindow, outputURL: URL) async throws {
         guard !isRecording else { return }
 
         let filter = SCContentFilter(desktopIndependentWindow: window)
-        let config = SCStreamConfiguration()
-        config.width = Int(window.frame.width) * 2
-        config.height = Int(window.frame.height) * 2
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
-        config.showsCursor = false
-        config.pixelFormat = kCVPixelFormatType_32BGRA
+        let width = Int(window.frame.width) * 2
+        let height = Int(window.frame.height) * 2
 
-        let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
-        let videoSettings: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: config.width,
-            AVVideoHeightKey: config.height,
-        ]
-        let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-        input.expectsMediaDataInRealTime = true
-        writer.add(input)
-
-        assetWriter = writer
-        videoInput = input
-        startTime = nil
-
-        writer.startWriting()
-
-        let captureStream = SCStream(filter: filter, configuration: config, delegate: self)
-        try captureStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: .main)
-        try await captureStream.startCapture()
-        stream = captureStream
-        isRecording = true
+        try await startCapture(filter: filter, width: width, height: height, outputURL: outputURL)
     }
 
     /// Start recording a display to a file.
@@ -67,31 +62,53 @@ final class ScreenRecorder: NSObject {
             excludingApplications: [],
             exceptingWindows: []
         )
+        let width = Int(display.width) * 2
+        let height = Int(display.height) * 2
+
+        try await startCapture(filter: filter, width: width, height: height, outputURL: outputURL)
+    }
+
+    private func startCapture(filter: SCContentFilter, width: Int, height: Int, outputURL: URL) async throws {
         let config = SCStreamConfiguration()
-        config.width = Int(display.width) * 2
-        config.height = Int(display.height) * 2
+        config.width = width
+        config.height = height
         config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
         config.showsCursor = false
         config.pixelFormat = kCVPixelFormatType_32BGRA
+        config.scalesToFit = true
 
+        // Set up AVAssetWriter with pixel buffer adaptor for raw frame input
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
         let videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: config.width,
-            AVVideoHeightKey: config.height,
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height,
         ]
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         input.expectsMediaDataInRealTime = true
+
+        let sourcePixelBufferAttributes: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: width,
+            kCVPixelBufferHeightKey as String: height,
+        ]
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: input,
+            sourcePixelBufferAttributes: sourcePixelBufferAttributes
+        )
+
         writer.add(input)
 
         assetWriter = writer
         videoInput = input
-        startTime = nil
+        pixelBufferAdaptor = adaptor
+        firstSampleTime = nil
+        sessionStarted = false
 
         writer.startWriting()
 
         let captureStream = SCStream(filter: filter, configuration: config, delegate: self)
-        try captureStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: .main)
+        try captureStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: captureQueue)
         try await captureStream.startCapture()
         stream = captureStream
         isRecording = true
@@ -109,10 +126,16 @@ final class ScreenRecorder: NSObject {
         videoInput?.markAsFinished()
         await writer.finishWriting()
 
+        if writer.status == .failed {
+            log.error("AssetWriter failed: \(writer.error?.localizedDescription ?? "unknown")")
+        }
+
         let url = writer.outputURL
         assetWriter = nil
         videoInput = nil
-        startTime = nil
+        pixelBufferAdaptor = nil
+        firstSampleTime = nil
+        sessionStarted = false
         return url
     }
 }
@@ -130,18 +153,23 @@ extension ScreenRecorder: SCStreamOutput {
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of type: SCStreamOutputType
     ) {
-        guard type == .screen,
-              let input = videoInput,
-              input.isReadyForMoreMediaData else { return }
+        guard type == .screen else { return }
 
-        if startTime == nil {
-            startTime = sampleBuffer.presentationTimeStamp
-            assetWriter?.startSession(atSourceTime: startTime!)
+        // Extract the pixel buffer from the sample
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+
+        guard let writer = assetWriter, writer.status == .writing,
+              let input = videoInput, input.isReadyForMoreMediaData,
+              let adaptor = pixelBufferAdaptor else { return }
+
+        let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+
+        if !sessionStarted {
+            firstSampleTime = timestamp
+            writer.startSession(atSourceTime: timestamp)
+            sessionStarted = true
         }
 
-        input.append(sampleBuffer)
+        adaptor.append(pixelBuffer, withPresentationTime: timestamp)
     }
 }
-
-private let log = Logger(subsystem: "com.demoreel.app", category: "ScreenRecorder")
-import OSLog

@@ -285,7 +285,7 @@ pub struct CursorConfig {
 impl Default for CursorConfig {
     fn default() -> Self {
         CursorConfig {
-            cursor_style: "circle".to_string(),
+            cursor_style: "system".to_string(),
             size_multiplier: 1.0,
             click_highlight: true,
             highlight_color_hex: "#3b82f6".to_string(),
@@ -385,6 +385,13 @@ pub struct ProjectFile {
     pub cursor_highlight_color_hex: String,
     pub trim_start_ms: u64,
     pub trim_end_ms: u64,
+}
+
+/// Error type for event log parsing.
+#[derive(uniffi::Error, thiserror::Error, Debug)]
+pub enum ParseError {
+    #[error("Invalid JSON: {message}")]
+    InvalidJson { message: String },
 }
 
 /// Error type for project file operations.

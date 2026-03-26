@@ -1,5 +1,4 @@
 import Foundation
-import DemoReelCore
 
 /// Bridges the Rust ExportCallback interface to Swift closures.
 final class ExportManager: ExportCallback {

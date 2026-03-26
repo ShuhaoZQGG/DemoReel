@@ -1,5 +1,4 @@
 import SwiftUI
-import DemoReelCore
 
 /// Main editor layout: preview on top, timeline below, tabbed controls in sidebar.
 struct EditorView: View {
@@ -223,7 +222,7 @@ struct EditorView: View {
         )
 
         do {
-            try DemoReelCore.saveProject(project: project, path: url.path)
+            try DemoReel.saveProject(project: project, path: url.path)
             appState.projectPath = url
         } catch {
             let alert = NSAlert()

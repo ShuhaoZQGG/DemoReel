@@ -7,7 +7,7 @@ pub mod zoom;
 
 use types::{
     CursorConfig, EventLog, EventLogRecord, ExportConfig, ExportError, ExportProgress, MouseEvent,
-    ProjectError, ProjectFile, SmoothedPoint, StyleConfig, ZoomConfig, ZoomKeyframe,
+    ParseError, ProjectError, ProjectFile, SmoothedPoint, StyleConfig, ZoomConfig, ZoomKeyframe,
 };
 
 uniffi::setup_scaffolding!();
@@ -52,15 +52,19 @@ pub fn smooth_cursor_path(positions: Vec<MouseEvent>, alpha: f64) -> Vec<Smoothe
 
 /// Parse an event log JSON string into a structured record.
 #[uniffi::export]
-pub fn parse_event_log(json: String) -> Result<EventLogRecord, String> {
-    let log: EventLog = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+pub fn parse_event_log(json: String) -> Result<EventLogRecord, ParseError> {
+    let log: EventLog = serde_json::from_str(&json).map_err(|e| ParseError::InvalidJson {
+        message: e.to_string(),
+    })?;
     Ok(EventLogRecord::from(&log))
 }
 
 /// Parse an event log and extract MouseEvents for the zoom engine.
 #[uniffi::export]
-pub fn mouse_events_from_log(json: String) -> Result<Vec<MouseEvent>, String> {
-    let log: EventLog = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+pub fn mouse_events_from_log(json: String) -> Result<Vec<MouseEvent>, ParseError> {
+    let log: EventLog = serde_json::from_str(&json).map_err(|e| ParseError::InvalidJson {
+        message: e.to_string(),
+    })?;
     Ok(log.to_mouse_events())
 }
 
@@ -95,8 +99,10 @@ pub fn compute_output_dimensions(
 
 /// Parse a hex color string into [r, g, b, a] components.
 #[uniffi::export]
-pub fn parse_hex_color(hex: String) -> Result<Vec<u8>, String> {
-    let (r, g, b, a) = compositor::parse_hex_color(&hex)?;
+pub fn parse_hex_color(hex: String) -> Result<Vec<u8>, ParseError> {
+    let (r, g, b, a) = compositor::parse_hex_color(&hex).map_err(|e| ParseError::InvalidJson {
+        message: e,
+    })?;
     Ok(vec![r, g, b, a])
 }
 

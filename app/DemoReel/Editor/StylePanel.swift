@@ -1,5 +1,4 @@
 import SwiftUI
-import DemoReelCore
 
 /// Sidebar panel for configuring visual style: background, padding, corners, shadow.
 struct StylePanel: View {

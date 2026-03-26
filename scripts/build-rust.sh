@@ -29,12 +29,12 @@ lipo -create \
 
 echo "Generating Swift bindings..."
 mkdir -p "$OUT_DIR"
-cargo run --manifest-path "$CORE_DIR/Cargo.toml" \
-    --features uniffi/cli \
-    --bin uniffi-bindgen generate \
-    --library "$CORE_DIR/target/aarch64-apple-darwin/release/libdemoreel_core.dylib" \
+
+(cd "$CORE_DIR" && cargo run --bin uniffi-bindgen -- \
+    generate \
+    --library "target/aarch64-apple-darwin/release/libdemoreel_core.dylib" \
     --language swift \
-    --out-dir "$OUT_DIR"
+    --out-dir "$OUT_DIR")
 
 echo "Done."
 echo "  Universal lib: $CORE_DIR/target/universal/libdemoreel_core.a"

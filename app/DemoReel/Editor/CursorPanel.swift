@@ -1,5 +1,4 @@
 import SwiftUI
-import DemoReelCore
 
 /// Sidebar panel for configuring cursor rendering style.
 struct CursorPanel: View {

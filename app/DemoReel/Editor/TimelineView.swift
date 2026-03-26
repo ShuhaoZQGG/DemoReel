@@ -1,5 +1,4 @@
 import SwiftUI
-import DemoReelCore
 
 /// Horizontal scrollable timeline showing zoom keyframes, playhead, and trim handles.
 struct TimelineView: View {

@@ -1,6 +1,5 @@
 import SwiftUI
 import AVFoundation
-import DemoReelCore
 
 /// Video preview with zoom, style, and cursor rendering applied in real-time.
 struct PreviewView: View {
@@ -19,12 +18,11 @@ struct PreviewView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                // Background
+                // Background — fills any area not covered by the video
                 backgroundView
-                    .frame(width: geo.size.width, height: geo.size.height)
 
                 if let player {
-                    // Video frame with styling
+                    // Video frame with styling, on top of background
                     VideoPlayerView(player: player)
                         .clipShape(RoundedRectangle(cornerRadius: styleConfig.cornerRadius))
                         .shadow(
@@ -35,16 +33,19 @@ struct PreviewView: View {
                         .scaleEffect(currentScale)
                         .animation(.easeInOut(duration: 0.05), value: currentScale)
                         .padding(styleConfig.padding)
+                        .zIndex(1)
 
                     // Cursor overlay
                     if cursorConfig.cursorStyle != "hidden", let point = currentCursorPoint {
                         cursorOverlay(at: point, in: geo.size)
+                            .zIndex(2)
                     }
                 } else {
                     Text("No video loaded")
                         .foregroundStyle(.secondary)
                 }
             }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .padding(8)
@@ -138,10 +139,7 @@ struct PreviewView: View {
             }
             .position(x: point.x, y: point.y)
         } else if cursorConfig.cursorStyle == "system" {
-            Image(systemName: "cursorarrow")
-                .font(.system(size: 16 * cursorConfig.sizeMultiplier))
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.5), radius: 1)
+            SystemCursorView(sizeMultiplier: cursorConfig.sizeMultiplier)
                 .position(x: point.x, y: point.y)
         }
     }
@@ -189,6 +187,37 @@ struct PreviewView: View {
     }
 }
 
+/// Renders the macOS system arrow cursor as a SwiftUI view.
+struct SystemCursorView: View {
+    var sizeMultiplier: Double
+
+    var body: some View {
+        Image(nsImage: cursorImage)
+            .resizable()
+            .frame(width: cursorSize.width, height: cursorSize.height)
+            .offset(x: cursorSize.width / 2 - hotSpot.x,
+                    y: cursorSize.height / 2 - hotSpot.y)
+            .shadow(color: .black.opacity(0.4), radius: 1, x: 0.5, y: 0.5)
+    }
+
+    private var cursorImage: NSImage {
+        NSCursor.arrow.image
+    }
+
+    private var hotSpot: CGPoint {
+        let hs = NSCursor.arrow.hotSpot
+        return CGPoint(x: hs.x * sizeMultiplier, y: hs.y * sizeMultiplier)
+    }
+
+    private var cursorSize: CGSize {
+        let img = NSCursor.arrow.image
+        return CGSize(
+            width: img.size.width * sizeMultiplier,
+            height: img.size.height * sizeMultiplier
+        )
+    }
+}
+
 /// NSViewRepresentable wrapper for AVPlayerLayer.
 struct VideoPlayerView: NSViewRepresentable {
     let player: AVPlayer
@@ -204,17 +233,20 @@ struct VideoPlayerView: NSViewRepresentable {
     }
 
     class PlayerNSView: NSView {
+        private let playerLayer = AVPlayerLayer()
+
         var player: AVPlayer? {
-            didSet {
-                (layer as? AVPlayerLayer)?.player = player
-            }
+            didSet { playerLayer.player = player }
         }
 
         override init(frame: NSRect) {
             super.init(frame: frame)
             wantsLayer = true
-            layer = AVPlayerLayer()
-            (layer as? AVPlayerLayer)?.videoGravity = .resizeAspect
+            playerLayer.videoGravity = .resizeAspect
+            playerLayer.backgroundColor = CGColor.clear
+            playerLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+            layer?.addSublayer(playerLayer)
+            playerLayer.frame = bounds
         }
 
         @available(*, unavailable)

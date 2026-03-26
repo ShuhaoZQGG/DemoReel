@@ -1,0 +1,4 @@
+module DemoReelCoreFFI {
+    header "DemoReelCoreFFI.h"
+    export *
+}

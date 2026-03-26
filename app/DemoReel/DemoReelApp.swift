@@ -1,5 +1,4 @@
 import SwiftUI
-import DemoReelCore
 
 @main
 struct DemoReelApp: App {

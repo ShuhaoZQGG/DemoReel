@@ -1,5 +1,4 @@
 import SwiftUI
-import DemoReelCore
 
 /// Allows drag/resize of individual zoom keyframe regions on the timeline.
 struct ZoomKeyframeEditor: View {

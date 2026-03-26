@@ -1,14 +1,14 @@
-import CoreGraphics
+import AppKit
 import Foundation
 
-/// Captures mouse events via CGEventTap during recording.
+/// Captures mouse events via NSEvent global/local monitors during recording.
 @Observable
 final class EventLogger {
     private(set) var events: [RecordedEvent] = []
     private(set) var isLogging = false
 
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
+    private var globalMonitor: Any?
+    private var localMonitor: Any?
     private var recordingStartTime: UInt64 = 0
 
     struct RecordedEvent: Codable {
@@ -35,46 +35,33 @@ final class EventLogger {
         }
     }
 
-    /// Start capturing mouse events.
+    /// Start capturing mouse events from all apps.
     func startLogging() {
         guard !isLogging else { return }
 
         events = []
         recordingStartTime = mach_absolute_time()
 
-        let eventMask: CGEventMask = (
-            (1 << CGEventType.mouseMoved.rawValue) |
-            (1 << CGEventType.leftMouseDown.rawValue) |
-            (1 << CGEventType.rightMouseDown.rawValue) |
-            (1 << CGEventType.scrollWheel.rawValue) |
-            (1 << CGEventType.leftMouseDragged.rawValue) |
-            (1 << CGEventType.rightMouseDragged.rawValue)
-        )
+        let mask: NSEvent.EventTypeMask = [
+            .mouseMoved,
+            .leftMouseDown,
+            .rightMouseDown,
+            .scrollWheel,
+            .leftMouseDragged,
+            .rightMouseDragged,
+        ]
 
-        let callback: CGEventTapCallBack = { _, type, event, userInfo in
-            guard let userInfo = userInfo else { return Unmanaged.passRetained(event) }
-            let logger = Unmanaged<EventLogger>.fromOpaque(userInfo).takeUnretainedValue()
-            logger.handleEvent(type: type, event: event)
-            return Unmanaged.passRetained(event)
+        // Monitor events in OTHER applications
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
+            self?.handleNSEvent(event)
         }
 
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .listenOnly,
-            eventsOfInterest: eventMask,
-            callback: callback,
-            userInfo: selfPtr
-        ) else {
-            return
+        // Monitor events in THIS application (DemoReel)
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+            self?.handleNSEvent(event)
+            return event
         }
 
-        eventTap = tap
-        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        runLoopSource = source
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
         isLogging = true
     }
 
@@ -82,14 +69,14 @@ final class EventLogger {
     func stopLogging() {
         guard isLogging else { return }
 
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
+        if let monitor = globalMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalMonitor = nil
         }
-        if let source = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        if let monitor = localMonitor {
+            NSEvent.removeMonitor(monitor)
+            localMonitor = nil
         }
-        eventTap = nil
-        runLoopSource = nil
         isLogging = false
     }
 
@@ -115,35 +102,40 @@ final class EventLogger {
         try data.write(to: url)
     }
 
-    private func handleEvent(type: CGEventType, event: CGEvent) {
-        let location = event.location
+    private func handleNSEvent(_ event: NSEvent) {
+        // NSEvent.mouseLocation uses bottom-left origin (AppKit convention).
+        // Convert to top-left origin to match video coordinate system.
+        let mouseLocation = NSEvent.mouseLocation
+        let screenHeight = NSScreen.main?.frame.height ?? 0
+        let x = mouseLocation.x
+        let y = screenHeight - mouseLocation.y
+
         let timestampMs = elapsedMs()
 
-        switch type {
+        switch event.type {
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged:
             events.append(RecordedEvent(
                 type: "move",
-                x: location.x,
-                y: location.y,
+                x: x,
+                y: y,
                 ts: timestampMs,
                 delta_y: nil
             ))
         case .leftMouseDown, .rightMouseDown:
             events.append(RecordedEvent(
                 type: "click",
-                x: location.x,
-                y: location.y,
+                x: x,
+                y: y,
                 ts: timestampMs,
                 delta_y: nil
             ))
         case .scrollWheel:
-            let deltaY = event.getDoubleValueField(.scrollWheelEventDeltaAxis1)
             events.append(RecordedEvent(
                 type: "scroll",
-                x: location.x,
-                y: location.y,
+                x: x,
+                y: y,
                 ts: timestampMs,
-                delta_y: deltaY
+                delta_y: Double(event.scrollingDeltaY)
             ))
         default:
             break
