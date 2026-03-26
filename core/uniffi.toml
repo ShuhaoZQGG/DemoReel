@@ -1,0 +1,4 @@
+[bindings.swift]
+module_name = "DemoReelCore"
+ffi_module_name = "DemoReelCoreFFI"
+generate_immutable_records = true

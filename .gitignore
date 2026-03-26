@@ -1,0 +1,25 @@
+# Rust
+/target/
+core/target/
+**/*.rs.bk
+*.dylib
+*.so
+*.d
+
+# Swift / Xcode
+app/DemoReel.xcodeproj/xcuserdata/
+app/DemoReel.xcodeproj/project.xcworkspace/xcuserdata/
+**/xcuserdata/
+**/.build/
+DerivedData/
+
+# Generated bindings
+app/DemoReel/Generated/*.swift
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
