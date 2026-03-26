@@ -160,3 +160,36 @@ impl EventLog {
         self.events.iter().map(MouseEvent::from).collect()
     }
 }
+
+/// Configuration for the auto-zoom keyframe generator.
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct ZoomConfig {
+    pub scale: f64,
+    pub ease_in_ms: u64,
+    pub hold_ms: u64,
+    pub ease_out_ms: u64,
+    pub merge_threshold_ms: u64,
+    pub enabled: bool,
+}
+
+impl Default for ZoomConfig {
+    fn default() -> Self {
+        ZoomConfig {
+            scale: 2.0,
+            ease_in_ms: 300,
+            hold_ms: 600,
+            ease_out_ms: 400,
+            merge_threshold_ms: 300,
+            enabled: true,
+        }
+    }
+}
+
+/// A smoothed cursor position with velocity information.
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct SmoothedPoint {
+    pub x: f64,
+    pub y: f64,
+    pub timestamp_ms: u64,
+    pub velocity: f64,
+}
