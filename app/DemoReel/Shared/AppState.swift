@@ -20,6 +20,13 @@ final class AppState {
     var videoPath: URL?
     var eventsPath: URL?
 
+    // Project state
+    var projectPath: URL?
+
+    // Trim state (milliseconds)
+    var trimStartMs: UInt64 = 0
+    var trimEndMs: UInt64 = 0
+
     /// Directory where recordings are saved.
     static var recordingsDirectory: URL {
         let movies = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first!

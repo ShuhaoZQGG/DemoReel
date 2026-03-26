@@ -351,3 +351,65 @@ pub struct ExportProgress {
     pub percent: f64,
     pub stage: String,
 }
+
+/// .demoreel project file format.
+///
+/// JSON manifest that stores references to the recording files and all
+/// user-configured settings (zoom, style, cursor).
+#[derive(uniffi::Record, Clone, Debug, Serialize, Deserialize)]
+pub struct ProjectFile {
+    pub version: u32,
+    pub name: String,
+    pub created_at: String,
+    pub video_path: String,
+    pub events_path: String,
+    pub zoom_scale: f64,
+    pub zoom_ease_in_ms: u64,
+    pub zoom_hold_ms: u64,
+    pub zoom_ease_out_ms: u64,
+    pub zoom_merge_threshold_ms: u64,
+    pub zoom_enabled: bool,
+    pub bg_type: String,
+    pub bg_hex: String,
+    pub bg_gradient_from_hex: String,
+    pub bg_gradient_to_hex: String,
+    pub bg_gradient_angle: f64,
+    pub padding: f64,
+    pub corner_radius: f64,
+    pub shadow_enabled: bool,
+    pub shadow_intensity: f64,
+    pub aspect_ratio: String,
+    pub cursor_style: String,
+    pub cursor_size_multiplier: f64,
+    pub cursor_click_highlight: bool,
+    pub cursor_highlight_color_hex: String,
+    pub trim_start_ms: u64,
+    pub trim_end_ms: u64,
+}
+
+/// Error type for project file operations.
+#[derive(uniffi::Error, thiserror::Error, Debug)]
+pub enum ProjectError {
+    #[error("IO error: {message}")]
+    IoError { message: String },
+    #[error("Parse error: {message}")]
+    ParseError { message: String },
+    #[error("Invalid project: {message}")]
+    InvalidProject { message: String },
+}
+
+impl From<std::io::Error> for ProjectError {
+    fn from(err: std::io::Error) -> Self {
+        ProjectError::IoError {
+            message: err.to_string(),
+        }
+    }
+}
+
+impl From<serde_json::Error> for ProjectError {
+    fn from(err: serde_json::Error) -> Self {
+        ProjectError::ParseError {
+            message: err.to_string(),
+        }
+    }
+}

@@ -13,6 +13,8 @@ struct EditorView: View {
     @State private var cursorConfig = defaultCursorConfig()
     @State private var selectedTab = SidebarTab.zoom
     @State private var showExportSheet = false
+    @State private var trimStart: Double = 0
+    @State private var trimEnd: Double = 0
 
     enum SidebarTab: String, CaseIterable {
         case zoom = "Zoom"
@@ -41,9 +43,11 @@ struct EditorView: View {
                     keyframes: keyframes,
                     duration: appState.recordingDuration,
                     currentTime: $currentTime,
-                    isPlaying: $isPlaying
+                    isPlaying: $isPlaying,
+                    trimStart: $trimStart,
+                    trimEnd: $trimEnd
                 )
-                .frame(height: 120)
+                .frame(height: 140)
             }
 
             VStack(spacing: 0) {
@@ -75,6 +79,13 @@ struct EditorView: View {
                 Button("Export") {
                     showExportSheet = true
                 }
+                .keyboardShortcut("e")
+            }
+            ToolbarItem(placement: .automatic) {
+                Button("Save") {
+                    saveProject()
+                }
+                .keyboardShortcut("s")
             }
             ToolbarItem(placement: .navigation) {
                 Button("New Recording") {
@@ -94,6 +105,13 @@ struct EditorView: View {
         }
         .task {
             loadEventsAndGenerate()
+            loadProjectSettingsIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .saveProject)) { _ in
+            saveProject()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .exportVideo)) { _ in
+            showExportSheet = true
         }
     }
 
@@ -107,6 +125,10 @@ struct EditorView: View {
             config: zoomConfig
         )
         smoothedPoints = smoothCursorPath(positions: mouseEvents, alpha: 0.3)
+
+        if trimEnd <= 0 {
+            trimEnd = appState.recordingDuration
+        }
     }
 
     private func regenerateKeyframes() {
@@ -118,6 +140,97 @@ struct EditorView: View {
             events: mouseEvents,
             config: zoomConfig
         )
+    }
+
+    private func loadProjectSettingsIfNeeded() {
+        guard let projectPath = appState.projectPath else { return }
+        guard let project = try? loadProject(path: projectPath.path) else { return }
+
+        zoomConfig = ZoomConfig(
+            scale: project.zoomScale,
+            easeInMs: project.zoomEaseInMs,
+            holdMs: project.zoomHoldMs,
+            easeOutMs: project.zoomEaseOutMs,
+            mergeThresholdMs: project.zoomMergeThresholdMs,
+            enabled: project.zoomEnabled
+        )
+        styleConfig = StyleConfig(
+            background: BackgroundConfig(
+                bgType: project.bgType,
+                hex: project.bgHex,
+                gradientFromHex: project.bgGradientFromHex,
+                gradientToHex: project.bgGradientToHex,
+                gradientAngleDegrees: project.bgGradientAngle
+            ),
+            padding: project.padding,
+            cornerRadius: project.cornerRadius,
+            shadowEnabled: project.shadowEnabled,
+            shadowIntensity: project.shadowIntensity,
+            aspectRatio: AspectRatioConfig(ratio: project.aspectRatio)
+        )
+        cursorConfig = CursorConfig(
+            cursorStyle: project.cursorStyle,
+            sizeMultiplier: project.cursorSizeMultiplier,
+            clickHighlight: project.cursorClickHighlight,
+            highlightColorHex: project.cursorHighlightColorHex
+        )
+        trimStart = Double(project.trimStartMs) / 1000.0
+        trimEnd = Double(project.trimEndMs) / 1000.0
+
+        regenerateKeyframes()
+    }
+
+    private func saveProject() {
+        let url: URL
+        if let existing = appState.projectPath {
+            url = existing
+        } else {
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.init(filenameExtension: "demoreel")!]
+            panel.nameFieldStringValue = "Untitled.demoreel"
+            guard panel.runModal() == .OK, let chosen = panel.url else { return }
+            url = chosen
+        }
+
+        let project = ProjectFile(
+            version: 1,
+            name: url.deletingPathExtension().lastPathComponent,
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            videoPath: appState.videoPath?.path ?? "",
+            eventsPath: appState.eventsPath?.path ?? "",
+            zoomScale: zoomConfig.scale,
+            zoomEaseInMs: zoomConfig.easeInMs,
+            zoomHoldMs: zoomConfig.holdMs,
+            zoomEaseOutMs: zoomConfig.easeOutMs,
+            zoomMergeThresholdMs: zoomConfig.mergeThresholdMs,
+            zoomEnabled: zoomConfig.enabled,
+            bgType: styleConfig.background.bgType,
+            bgHex: styleConfig.background.hex,
+            bgGradientFromHex: styleConfig.background.gradientFromHex,
+            bgGradientToHex: styleConfig.background.gradientToHex,
+            bgGradientAngle: styleConfig.background.gradientAngleDegrees,
+            padding: styleConfig.padding,
+            cornerRadius: styleConfig.cornerRadius,
+            shadowEnabled: styleConfig.shadowEnabled,
+            shadowIntensity: styleConfig.shadowIntensity,
+            aspectRatio: styleConfig.aspectRatio.ratio,
+            cursorStyle: cursorConfig.cursorStyle,
+            cursorSizeMultiplier: cursorConfig.sizeMultiplier,
+            cursorClickHighlight: cursorConfig.clickHighlight,
+            cursorHighlightColorHex: cursorConfig.highlightColorHex,
+            trimStartMs: UInt64(trimStart * 1000),
+            trimEndMs: UInt64(trimEnd * 1000)
+        )
+
+        do {
+            try DemoReelCore.saveProject(project: project, path: url.path)
+            appState.projectPath = url
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Failed to save project"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
     }
 }
 

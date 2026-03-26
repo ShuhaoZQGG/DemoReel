@@ -1,12 +1,14 @@
 import SwiftUI
 import DemoReelCore
 
-/// Horizontal scrollable timeline showing zoom keyframes and a playhead.
+/// Horizontal scrollable timeline showing zoom keyframes, playhead, and trim handles.
 struct TimelineView: View {
     let keyframes: [ZoomKeyframe]
     let duration: TimeInterval
     @Binding var currentTime: Double
     @Binding var isPlaying: Bool
+    @Binding var trimStart: Double
+    @Binding var trimEnd: Double
 
     @State private var pixelsPerSecond: Double = 100
 
@@ -37,7 +39,14 @@ struct TimelineView: View {
 
                 Spacer()
 
-                // Zoom level for timeline
+                if trimStart > 0 || trimEnd < duration {
+                    Text("Trim: \(formattedTime(trimStart)) – \(formattedTime(trimEnd))")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+
+                Spacer()
+
                 HStack(spacing: 4) {
                     Image(systemName: "minus.magnifyingglass")
                     Slider(value: $pixelsPerSecond, in: 30...300)
@@ -59,6 +68,21 @@ struct TimelineView: View {
                     TimeRuler(duration: duration, pixelsPerSecond: pixelsPerSecond)
                         .frame(height: 20)
 
+                    // Trimmed-out regions (dimmed)
+                    if trimStart > 0 {
+                        Rectangle()
+                            .fill(.black.opacity(0.3))
+                            .frame(width: trimStart * pixelsPerSecond, height: 100)
+                            .offset(y: 0)
+                    }
+                    if trimEnd < duration {
+                        let trimEndX = trimEnd * pixelsPerSecond
+                        Rectangle()
+                            .fill(.black.opacity(0.3))
+                            .frame(width: (duration - trimEnd) * pixelsPerSecond, height: 100)
+                            .offset(x: trimEndX, y: 0)
+                    }
+
                     // Keyframe track
                     ForEach(Array(keyframes.enumerated()), id: \.offset) { _, kf in
                         let x = Double(kf.startMs) / 1000.0 * pixelsPerSecond
@@ -73,13 +97,33 @@ struct TimelineView: View {
                             .offset(x: x, y: 24)
                     }
 
+                    // Trim start handle
+                    TrimHandle(position: trimStart * pixelsPerSecond, side: .left)
+                        .gesture(
+                            DragGesture()
+                                .onChanged { value in
+                                    let newTime = max(0, value.location.x / pixelsPerSecond)
+                                    trimStart = min(newTime, trimEnd - 0.1)
+                                }
+                        )
+
+                    // Trim end handle
+                    TrimHandle(position: trimEnd * pixelsPerSecond, side: .right)
+                        .gesture(
+                            DragGesture()
+                                .onChanged { value in
+                                    let newTime = min(duration, value.location.x / pixelsPerSecond)
+                                    trimEnd = max(newTime, trimStart + 0.1)
+                                }
+                        )
+
                     // Playhead
                     Rectangle()
                         .fill(.red)
                         .frame(width: 1.5)
                         .offset(x: currentTime * pixelsPerSecond)
                 }
-                .frame(width: totalWidth, height: 80)
+                .frame(width: totalWidth, height: 100)
                 .contentShape(Rectangle())
                 .onTapGesture { location in
                     let time = location.x / pixelsPerSecond
@@ -95,6 +139,34 @@ struct TimelineView: View {
         let seconds = Int(time) % 60
         let millis = Int((time.truncatingRemainder(dividingBy: 1)) * 10)
         return String(format: "%02d:%02d.%01d", minutes, seconds, millis)
+    }
+}
+
+/// Draggable trim handle on the timeline.
+struct TrimHandle: View {
+    let position: Double
+
+    enum Side { case left, right }
+    let side: Side
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.orange)
+                .frame(width: 3)
+
+            VStack {
+                Image(systemName: side == .left ? "chevron.compact.right" : "chevron.compact.left")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 14, height: 28)
+                    .background(.orange, in: RoundedRectangle(cornerRadius: 3))
+                Spacer()
+            }
+        }
+        .frame(width: 14, height: 100)
+        .offset(x: position - 7)
+        .contentShape(Rectangle())
     }
 }
 

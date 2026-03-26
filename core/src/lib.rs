@@ -7,7 +7,7 @@ pub mod zoom;
 
 use types::{
     CursorConfig, EventLog, EventLogRecord, ExportConfig, ExportError, ExportProgress, MouseEvent,
-    SmoothedPoint, StyleConfig, ZoomConfig, ZoomKeyframe,
+    ProjectError, ProjectFile, SmoothedPoint, StyleConfig, ZoomConfig, ZoomKeyframe,
 };
 
 uniffi::setup_scaffolding!();
@@ -115,6 +115,18 @@ pub trait ExportCallback: Send + Sync {
     fn on_progress(&self, progress: ExportProgress);
     fn on_complete(&self, output_path: String);
     fn on_error(&self, message: String);
+}
+
+/// Save a project to a .demoreel file.
+#[uniffi::export]
+pub fn save_project(project: ProjectFile, path: String) -> Result<(), ProjectError> {
+    project::save_project(&project, &path)
+}
+
+/// Load a project from a .demoreel file.
+#[uniffi::export]
+pub fn load_project(path: String) -> Result<ProjectFile, ProjectError> {
+    project::load_project(&path)
 }
 
 /// Start the export pipeline with a callback for progress reporting.
