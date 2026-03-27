@@ -7,6 +7,7 @@ struct PreviewView: View {
     let keyframes: [ZoomKeyframe]
     let smoothedPoints: [SmoothedPoint]
     @Binding var currentTime: Double
+    let timelinePosition: Double
     @Binding var isPlaying: Bool
     let zoomConfig: ZoomConfig
     let styleConfig: StyleConfig
@@ -15,7 +16,6 @@ struct PreviewView: View {
     let videoHeight: Double
 
     @State private var player: AVPlayer?
-    @State private var timeObserver: Any?
 
     var body: some View { 
         GeometryReader { geo in
@@ -23,7 +23,11 @@ struct PreviewView: View {
                 // Background — fills any area not covered by the video
                 backgroundView
 
-                if let player {
+                if currentTime < 0 {
+                    // Gap — show black (standard NLE behavior)
+                    Color.black
+                        .zIndex(1)
+                } else if let player {
                     // Video and cursor in same coordinate space.
                     // Both are sized by the same GeometryReader and
                     // transformed by the same scaleEffect.
@@ -52,24 +56,18 @@ struct PreviewView: View {
         .onChange(of: videoURL) { _, newURL in
             setupPlayer(url: newURL)
         }
-        .onChange(of: isPlaying) { _, playing in
-            if playing {
-                player?.play()
-            } else {
-                player?.pause()
-            }
-        }
         .onChange(of: currentTime) { _, newTime in
-            if !isPlaying {
+            // Playback is timer-driven from EditorView, not AVPlayer.play().
+            // We always keep the player paused and just seek to show the correct frame.
+            if newTime >= 0 {
                 let cmTime = CMTime(seconds: newTime, preferredTimescale: 600)
                 player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
             }
+            // When newTime < 0 (gap), we don't seek — the video stays on last frame
+            // but the overlay shows black (handled in the view body).
         }
         .onAppear {
             setupPlayer(url: videoURL)
-        }
-        .onDisappear {
-            removeTimeObserver()
         }
     }
 
@@ -246,7 +244,8 @@ struct PreviewView: View {
     }
 
     private var currentScale: Double {
-        let timestampMs = UInt64(currentTime * 1000)
+        // Use timeline position (zoom clips are in timeline coordinates)
+        let timestampMs = UInt64(max(0, timelinePosition) * 1000)
         return zoomScaleAt(
             keyframes: keyframes,
             timestampMs: timestampMs,
@@ -256,7 +255,7 @@ struct PreviewView: View {
 
     /// The anchor point for the zoom effect — zooms toward the click position.
     private var currentZoomAnchor: UnitPoint {
-        let timestampMs = UInt64(currentTime * 1000)
+        let timestampMs = UInt64(max(0, timelinePosition) * 1000)
         let center = zoomCenterAt(keyframes: keyframes, timestampMs: timestampMs)
         guard center.count == 2, videoWidth > 0, videoHeight > 0 else {
             return .center
@@ -273,31 +272,14 @@ struct PreviewView: View {
     }
 
     private func setupPlayer(url: URL?) {
-        removeTimeObserver()
         guard let url else {
             player = nil
             return
         }
-
-        let newPlayer = AVPlayer(url: url)
-        player = newPlayer
-
-        let interval = CMTime(value: 1, timescale: 30)
-        timeObserver = newPlayer.addPeriodicTimeObserver(
-            forInterval: interval,
-            queue: .main
-        ) { time in
-            if isPlaying {
-                currentTime = time.seconds
-            }
-        }
-    }
-
-    private func removeTimeObserver() {
-        if let observer = timeObserver {
-            player?.removeTimeObserver(observer)
-            timeObserver = nil
-        }
+        // Player is always paused — playback is driven by timer in EditorView
+        // which sets currentTime, and we seek to show the correct frame.
+        player = AVPlayer(url: url)
+        player?.pause()
     }
 }
 

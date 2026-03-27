@@ -177,7 +177,13 @@ struct ExportSheet: View {
         )
 
         Task.detached {
-            exportVideo(config: config, callback: manager)
+            let exporter = NativeExporter(
+                config: config,
+                onProgress: { manager.onProgress(progress: $0) },
+                onComplete: { manager.onComplete(outputPath: $0) },
+                onError: { manager.onError(message: $0) }
+            )
+            exporter.export()
         }
     }
 

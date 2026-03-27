@@ -8,6 +8,7 @@ private let log = Logger(subsystem: "com.demoreel.app", category: "ScreenRecorde
 @Observable
 final class ScreenRecorder: NSObject {
     private(set) var isRecording = false
+    private(set) var isPaused = false
     private(set) var availableWindows: [SCWindow] = []
     private(set) var availableDisplays: [SCDisplay] = []
     private(set) var captureRect: CGRect = .zero
@@ -19,6 +20,8 @@ final class ScreenRecorder: NSObject {
     private var firstSampleTime: CMTime?
     private var sessionStarted = false
     private let captureQueue = DispatchQueue(label: "com.demoreel.capture", qos: .userInteractive)
+    private var pauseStartTime: CMTime?
+    private var totalPausedDuration: CMTime = .zero
 
     /// Refresh the list of capturable windows and displays.
     func refreshAvailableSources() async throws {
@@ -114,6 +117,28 @@ final class ScreenRecorder: NSObject {
         isRecording = true
     }
 
+    /// Pause recording — frames are skipped but the stream stays alive.
+    func pause() {
+        guard isRecording, !isPaused else { return }
+        captureQueue.sync {
+            pauseStartTime = CMClockGetTime(CMClockGetHostTimeClock())
+        }
+        isPaused = true
+    }
+
+    /// Resume recording after a pause.
+    func resume() {
+        guard isRecording, isPaused else { return }
+        captureQueue.sync {
+            if let start = pauseStartTime {
+                let now = CMClockGetTime(CMClockGetHostTimeClock())
+                totalPausedDuration = CMTimeAdd(totalPausedDuration, CMTimeSubtract(now, start))
+                pauseStartTime = nil
+            }
+        }
+        isPaused = false
+    }
+
     /// Stop recording and finalize the .mov file.
     func stopRecording() async throws -> URL? {
         guard isRecording else { return nil }
@@ -136,6 +161,9 @@ final class ScreenRecorder: NSObject {
         pixelBufferAdaptor = nil
         firstSampleTime = nil
         sessionStarted = false
+        isPaused = false
+        pauseStartTime = nil
+        totalPausedDuration = .zero
         return url
     }
 }
@@ -155,6 +183,9 @@ extension ScreenRecorder: SCStreamOutput {
     ) {
         guard type == .screen else { return }
 
+        // Skip frames while paused
+        guard !isPaused else { return }
+
         // Extract the pixel buffer from the sample
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
@@ -164,12 +195,15 @@ extension ScreenRecorder: SCStreamOutput {
 
         let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
 
+        // Adjust timestamp to remove paused duration for continuous output
+        let adjustedTime = CMTimeSubtract(timestamp, totalPausedDuration)
+
         if !sessionStarted {
-            firstSampleTime = timestamp
-            writer.startSession(atSourceTime: timestamp)
+            firstSampleTime = adjustedTime
+            writer.startSession(atSourceTime: adjustedTime)
             sessionStarted = true
         }
 
-        adaptor.append(pixelBuffer, withPresentationTime: timestamp)
+        adaptor.append(pixelBuffer, withPresentationTime: adjustedTime)
     }
 }

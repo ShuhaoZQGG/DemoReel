@@ -24,8 +24,12 @@
 		E52D59E0E94E2B6254657C44 /* DemoReelCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383C3C1138528350C6D6BFB5 /* DemoReelCore.swift */; };
 		E817796F5990E187809B30FE /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A8D8861618509BE87E0D3A /* RecordingView.swift */; };
 		EF0DF68D31E8CF2D53F09D5E /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A6FA81971BB9558E8413156 /* EditorView.swift */; };
+		D4E5F60718A9B0C1D2E3F4A5 /* NativeExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D4E5F60718A9B0C1D2E3F4 /* NativeExporter.swift */; };
 		F1D1A3D267F35F65D8D6A79C /* ExportManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8442CAC3A00230FBB89FD7BA /* ExportManager.swift */; };
 		F3690633F7F63BDACCBBD27A /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68F935ED02583659A6E20DA3 /* AppState.swift */; };
+		C89525FE9EAC4F23A488A189 /* Clip.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC4430EDE543472288D033FF /* Clip.swift */; };
+		110F775863484220912E0FE0 /* ClipManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56BFD65D09CD44C780A31EBF /* ClipManager.swift */; };
+		AA1122334455667788990011 /* ZoomClip.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1122334455667788990011 /* ZoomClip.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +42,7 @@
 		7F4978D5C5F66FE363001369 /* RecordingOverlayPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlayPanel.swift; sourceTree = "<group>"; };
 		83BFDD4820105159572DDDF2 /* PreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewView.swift; sourceTree = "<group>"; };
 		8442CAC3A00230FBB89FD7BA /* ExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManager.swift; sourceTree = "<group>"; };
+		C3D4E5F60718A9B0C1D2E3F4 /* NativeExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeExporter.swift; sourceTree = "<group>"; };
 		8A6FA81971BB9558E8413156 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		8B099A312D613654F6D3B084 /* ZoomKeyframeEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomKeyframeEditor.swift; sourceTree = "<group>"; };
 		941792B02818CA58D3858944 /* DemoReelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoReelApp.swift; sourceTree = "<group>"; };
@@ -52,6 +57,9 @@
 		FBDA14E0A7DCFE079EC0B578 /* TimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineView.swift; sourceTree = "<group>"; };
 		FD882DCDFC67858E4608DD7A /* RecordingOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlayView.swift; sourceTree = "<group>"; };
 		FF37F4D0A360A3FBE2EC2165 /* AudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCapture.swift; sourceTree = "<group>"; };
+		DC4430EDE543472288D033FF /* Clip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clip.swift; sourceTree = "<group>"; };
+		56BFD65D09CD44C780A31EBF /* ClipManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipManager.swift; sourceTree = "<group>"; };
+		BB1122334455667788990011 /* ZoomClip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomClip.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -115,6 +123,7 @@
 			children = (
 				8442CAC3A00230FBB89FD7BA /* ExportManager.swift */,
 				FA51FEBAA10F1CFD4F7EE383 /* ExportSheet.swift */,
+				C3D4E5F60718A9B0C1D2E3F4 /* NativeExporter.swift */,
 			);
 			path = Export;
 			sourceTree = "<group>";
@@ -132,10 +141,13 @@
 			children = (
 				AFF32E808D120C70E6836921 /* CursorPanel.swift */,
 				8A6FA81971BB9558E8413156 /* EditorView.swift */,
+				DC4430EDE543472288D033FF /* Clip.swift */,
+				56BFD65D09CD44C780A31EBF /* ClipManager.swift */,
 				83BFDD4820105159572DDDF2 /* PreviewView.swift */,
 				9F3CB6CC10C3A51D56C347A8 /* StylePanel.swift */,
 				FBDA14E0A7DCFE079EC0B578 /* TimelineView.swift */,
 				8B099A312D613654F6D3B084 /* ZoomKeyframeEditor.swift */,
+				BB1122334455667788990011 /* ZoomClip.swift */,
 			);
 			path = Editor;
 			sourceTree = "<group>";
@@ -202,9 +214,13 @@
 				A20271BE43F4995466AAD8CA /* DemoReelApp.swift in Sources */,
 				E52D59E0E94E2B6254657C44 /* DemoReelCore.swift in Sources */,
 				EF0DF68D31E8CF2D53F09D5E /* EditorView.swift in Sources */,
+				C89525FE9EAC4F23A488A189 /* Clip.swift in Sources */,
+				110F775863484220912E0FE0 /* ClipManager.swift in Sources */,
+				AA1122334455667788990011 /* ZoomClip.swift in Sources */,
 				60BE27B07798ABFD43A504A6 /* EventLogger.swift in Sources */,
 				F1D1A3D267F35F65D8D6A79C /* ExportManager.swift in Sources */,
 				AF196859F30BBE74890B81FA /* ExportSheet.swift in Sources */,
+				D4E5F60718A9B0C1D2E3F4A5 /* NativeExporter.swift in Sources */,
 				8C2E4E26B34618B829509BD3 /* PreviewView.swift in Sources */,
 				1E15CF88DB49D5A9618D3BA0 /* RecordingOverlayPanel.swift in Sources */,
 				D2F303A030DA9CD202BA8FD3 /* RecordingOverlayView.swift in Sources */,

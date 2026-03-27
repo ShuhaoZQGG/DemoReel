@@ -14,6 +14,9 @@ final class EventLogger {
     private var windowOriginQuartz: CGPoint = .zero
     /// Main screen height for converting AppKit→Quartz Y
     private var screenHeight: CGFloat = 0
+    /// Total nanos spent paused, subtracted from elapsed time
+    private var totalPausedNanos: UInt64 = 0
+    private var pauseStartAbsolute: UInt64 = 0
 
     struct RecordedEvent: Codable {
         let type: String
@@ -51,7 +54,55 @@ final class EventLogger {
         self.screenHeight = screenHeight
         events = []
         recordingStartTime = mach_absolute_time()
+        totalPausedNanos = 0
+        pauseStartAbsolute = 0
 
+        installMonitors()
+        isLogging = true
+    }
+
+    /// Stop capturing events.
+    func stopLogging() {
+        removeMonitors()
+        isLogging = false
+        totalPausedNanos = 0
+        pauseStartAbsolute = 0
+    }
+
+    /// Pause event capture — monitors are removed, elapsed time tracking pauses.
+    func pauseLogging() {
+        guard isLogging else { return }
+        removeMonitors()
+        pauseStartAbsolute = mach_absolute_time()
+        isLogging = false
+    }
+
+    /// Resume event capture after a pause.
+    func resumeLogging() {
+        guard !isLogging else { return }
+        if pauseStartAbsolute > 0 {
+            var info = mach_timebase_info_data_t()
+            mach_timebase_info(&info)
+            let pausedTicks = mach_absolute_time() - pauseStartAbsolute
+            totalPausedNanos += pausedTicks * UInt64(info.numer) / UInt64(info.denom)
+            pauseStartAbsolute = 0
+        }
+        installMonitors()
+        isLogging = true
+    }
+
+    private func removeMonitors() {
+        if let monitor = globalMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalMonitor = nil
+        }
+        if let monitor = localMonitor {
+            NSEvent.removeMonitor(monitor)
+            localMonitor = nil
+        }
+    }
+
+    private func installMonitors() {
         let mask: NSEvent.EventTypeMask = [
             .mouseMoved,
             .leftMouseDown,
@@ -69,23 +120,6 @@ final class EventLogger {
             self?.handleNSEvent(event)
             return event
         }
-
-        isLogging = true
-    }
-
-    /// Stop capturing events.
-    func stopLogging() {
-        guard isLogging else { return }
-
-        if let monitor = globalMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalMonitor = nil
-        }
-        if let monitor = localMonitor {
-            NSEvent.removeMonitor(monitor)
-            localMonitor = nil
-        }
-        isLogging = false
     }
 
     /// Save events to a JSON file matching the event log format.
@@ -148,7 +182,8 @@ final class EventLogger {
         mach_timebase_info(&info)
         let elapsed = mach_absolute_time() - recordingStartTime
         let nanos = elapsed * UInt64(info.numer) / UInt64(info.denom)
-        return nanos / 1_000_000
+        let activeNanos = nanos - totalPausedNanos
+        return activeNanos / 1_000_000
     }
 }
 

@@ -4,15 +4,15 @@ import SwiftUI
 /// A borderless, always-on-top floating panel for recording controls.
 /// Doesn't steal focus from the app being recorded.
 final class RecordingOverlayPanel: NSPanel {
-    init(contentView: NSView) {
+    init(size: CGSize) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 220, height: 44),
+            contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
 
-        self.contentView = contentView
+        isReleasedWhenClosed = false
         isOpaque = false
         backgroundColor = .clear
         level = .floating
@@ -23,8 +23,8 @@ final class RecordingOverlayPanel: NSPanel {
         // Position at top-center of the main screen
         if let screen = NSScreen.main {
             let screenFrame = screen.visibleFrame
-            let x = screenFrame.midX - frame.width / 2
-            let y = screenFrame.maxY - frame.height - 12
+            let x = screenFrame.midX - size.width / 2
+            let y = screenFrame.maxY - size.height - 12
             setFrameOrigin(NSPoint(x: x, y: y))
         }
     }

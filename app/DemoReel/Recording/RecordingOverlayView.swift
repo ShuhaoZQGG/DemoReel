@@ -1,20 +1,28 @@
 import SwiftUI
 
-/// Compact floating bar shown during recording: red dot, timer, stop button.
+/// Compact floating bar shown during recording: red dot, timer, stop/resume + finish buttons.
 struct RecordingOverlayView: View {
     @Binding var elapsedSeconds: Int
-    let onStop: () -> Void
+    @Binding var isPaused: Bool
+    let onTogglePause: () -> Void
+    let onFinish: () -> Void
 
     @State private var dotOpacity: Double = 1.0
 
     var body: some View {
         HStack(spacing: 12) {
-            // Pulsing red recording dot
+            // Recording/paused indicator dot
             Circle()
-                .fill(.red)
+                .fill(isPaused ? .orange : .red)
                 .frame(width: 10, height: 10)
-                .opacity(dotOpacity)
-                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: dotOpacity)
+                .opacity(isPaused ? 1.0 : dotOpacity)
+                .animation(
+                    isPaused ? .default : .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
+                    value: dotOpacity
+                )
+                .onChange(of: isPaused) { _, paused in
+                    dotOpacity = paused ? 1.0 : 0.3
+                }
                 .onAppear { dotOpacity = 0.3 }
 
             // Timer
@@ -25,20 +33,28 @@ struct RecordingOverlayView: View {
             Divider()
                 .frame(height: 16)
 
-            // Stop button
-            Button(action: onStop) {
-                HStack(spacing: 4) {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 10))
-                    Text("Stop")
-                        .font(.system(.callout, weight: .medium))
-                }
-                .foregroundStyle(.white)
+            // Pause / Resume button
+            Button(action: onTogglePause) {
+                Image(systemName: isPaused ? "play.fill" : "pause.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(.white.opacity(0.15), in: Circle())
+            }
+            .buttonStyle(.plain)
+
+            // Finish button (stop square = end recording)
+            Button(action: onFinish) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(.white.opacity(0.15), in: Circle())
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
         .background(.ultraThinMaterial.opacity(0.9))
         .background(Color.black.opacity(0.5))
         .clipShape(Capsule())

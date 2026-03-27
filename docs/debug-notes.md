@@ -236,3 +236,155 @@ class PlayerNSView: NSView {
 - Hosts a SwiftUI view via `NSHostingView`
 
 **Key:** `.nonactivatingPanel` is critical — without it, clicking the stop button would activate DemoReel and steal focus from the recorded window.
+
+---
+
+## 12. NSHostingView in NSPanel — Auto Layout Constraint Crash
+
+**Problem:** `NSGenericException: The window has been marked as needing another Update Constraints in Window pass, but it has already had more Update Constraints in Window passes than there are views in the window.` — app crashes when showing the recording overlay panel.
+
+**Root cause:** `NSHostingView` uses Auto Layout internally and continuously recalculates constraints as SwiftUI state changes (bindings like `elapsedSeconds`, animations like the pulsing dot). When set directly as a borderless panel's `contentView`, the panel's fixed frame and the hosting view's dynamic intrinsic content size fight each other, creating an infinite constraint update loop.
+
+**What didn't work:**
+1. Setting `hostingView.frame` + `autoresizingMask` before assigning as contentView — same crash
+2. Using `fittingSize` to match panel size to hosting view — still crashes because the hosting view's size changes dynamically with state updates
+
+**Fix:** Wrap the `NSHostingView` in a plain `NSView` container. The wrapper has a fixed frame and serves as the panel's `contentView`. The hosting view is added as a subview with only centering constraints (no width/height constraints that would create cycles):
+```swift
+let wrapper = NSView(frame: NSRect(origin: .zero, size: panelSize))
+hostingView.translatesAutoresizingMaskIntoConstraints = false
+wrapper.addSubview(hostingView)
+NSLayoutConstraint.activate([
+    hostingView.centerXAnchor.constraint(equalTo: wrapper.centerXAnchor),
+    hostingView.centerYAnchor.constraint(equalTo: wrapper.centerYAnchor),
+])
+panel.contentView = wrapper
+```
+
+**Lesson:** Never use `NSHostingView` directly as a borderless panel's `contentView` when the SwiftUI content has dynamic state or animations. The wrapper NSView breaks the constraint feedback loop by decoupling the panel's frame management from the hosting view's Auto Layout.
+
+---
+
+## 13. Floating Overlay Panel Persistence After Recording
+
+**Problem:** After clicking "Finish" to end a recording and navigating to the editor, the floating recording bar remained on screen. Doing N recordings would leave N orphaned floating bars.
+
+**Root cause (multi-layered):**
+
+1. **`orderOut` vs `close`:** `dismissOverlay()` originally called `overlayPanel?.orderOut(nil)`, which hides the panel but keeps the `NSPanel` object alive in `NSApplication.shared.windows`. Fixed by using `.close()` instead.
+
+2. **Window restoration loop:** `finishRecording()` iterated over ALL windows with `window.makeKeyAndOrderFront(nil)`, which brought back any overlay panel that hadn't been garbage-collected yet. Fixed by filtering: `where !(window is RecordingOverlayPanel)`.
+
+3. **SwiftUI struct lifecycle (the real root cause):** `RecordingView` is a SwiftUI struct. When the app navigates to `.editor` screen, the struct is destroyed and `@State overlayPanel` is lost. But the actual `NSPanel` window object remains alive in the window server — orphaned with no Swift reference to close it. On the next recording, a new panel is created while the old one lingers.
+
+**Fix:** `dismissOverlay()` now also sweeps all app windows for any `RecordingOverlayPanel` instances and closes them:
+```swift
+private func dismissOverlay() {
+    overlayPanel?.close()
+    overlayPanel = nil
+    for window in NSApplication.shared.windows where window is RecordingOverlayPanel {
+        window.close()
+    }
+}
+```
+
+**Lesson:** When SwiftUI views manage AppKit window objects via `@State`, the window can outlive the SwiftUI view's lifecycle. Always clean up by scanning `NSApplication.shared.windows` rather than relying solely on a stored reference.
+
+---
+
+## 14. Video Editor — Play/Pause Bug After End of Video
+
+**Problem:** Playing a recording works the first time, but after the video reaches the end, pressing Space to play again would instantly jump to the last frame instead of restarting playback.
+
+**Root cause:** When AVPlayer reaches the end of the video, its `timeControlStatus` becomes `.paused` internally, but the editor's `isPlaying` state remains `true`. Pressing Space toggles `isPlaying` to `false` (pausing an already-paused player — no-op), then pressing Space again toggles it to `true` and calls `player.play()`. But since the playhead is at the end, `play()` immediately hits end-of-item and the time observer fires with the final timestamp.
+
+**Fix (two parts):**
+
+1. Observe `AVPlayerItem.didPlayToEndTime` notification to reset `isPlaying = false` when the video naturally ends:
+```swift
+endObserver = NotificationCenter.default.addObserver(
+    forName: .AVPlayerItemDidPlayToEndTime,
+    object: newPlayer.currentItem,
+    queue: .main
+) { _ in
+    isPlaying = false
+}
+```
+
+2. In the `onChange(of: isPlaying)` handler, detect when the player is at the end and seek to the beginning before playing:
+```swift
+if playing {
+    if let item = player?.currentItem {
+        let playerTime = player?.currentTime() ?? .zero
+        let duration = item.duration
+        if duration.isValid, !duration.isIndefinite,
+           CMTimeCompare(playerTime, duration) >= 0 {
+            player?.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+            currentTime = 0
+        }
+    }
+    player?.play()
+}
+```
+
+**Lesson:** AVPlayer doesn't auto-reset to the beginning when playback ends. The app must observe `.AVPlayerItemDidPlayToEndTime` and handle the seek-to-start logic explicitly.
+
+---
+
+## 15. Timeline Playhead — Click-Only, No Drag Scrubbing
+
+**Problem:** The timeline playhead only responded to clicks (`.onTapGesture`). Users couldn't drag to scrub through the video — clicking was imprecise and sometimes required multiple clicks.
+
+**Fix:** Replace `.onTapGesture` with `DragGesture(minimumDistance: 0)`, which fires on both taps (zero distance) and drags:
+```swift
+.gesture(
+    DragGesture(minimumDistance: 0)
+        .onChanged { value in
+            let time = value.location.x / pixelsPerSecond
+            currentTime = max(0, min(time, duration))
+            if isPlaying { isPlaying = false }
+        }
+)
+```
+
+**Lesson:** `DragGesture(minimumDistance: 0)` is the idiomatic SwiftUI pattern for combined click-and-drag interactions. It supersedes `.onTapGesture` for scrubber/slider-like controls.
+
+---
+
+## 16. Export Pipeline — Unbounded Memory Growth (80 GB+)
+
+**Problem:** Exporting a 40-second recording at 6880x2880 caused memory to grow past 80 GB and never stop, eventually forcing a kill or system hang.
+
+**Root cause (two issues):**
+
+1. **No `autoreleasepool` in frame loop.** The export loop processes ~1200 frames sequentially. Each iteration creates heavyweight Obj-C/Core Graphics objects — `CIImage`, `NSCIImageRep`, `NSImage`, `ImageRenderer`, `CGImage` — that are autoreleased. In a tight `while` loop that never returns to a run loop, these objects accumulate in the default autorelease pool and are never drained until the entire `runExport()` method returns. For 1200 frames of 6880x2880 video, this means tens of thousands of multi-megabyte image objects alive simultaneously.
+
+2. **`CIContext()` created per frame.** `CIContext` is a heavyweight object that allocates GPU resources and internal caches. The old code created a new one for every frame (actually two per frame in the standalone script — one for reading, one for writing). Each `CIContext` retains its caches even after use, so 2400 instances accumulated their GPU buffers.
+
+**Fix:**
+
+1. Wrap the frame loop body in `autoreleasepool { }`. This drains all temporary Obj-C objects at the end of each iteration:
+```swift
+while let sampleBuffer = videoOutput.copyNextSampleBuffer() {
+    autoreleasepool {
+        // ... all frame processing ...
+    }
+}
+```
+Note: inside the closure, `continue` becomes `return` (equivalent behavior — skips to next iteration).
+
+2. Move `CIContext()` creation outside the loop — one instance reused for all frames:
+```swift
+let ciCtx = CIContext()  // created once
+while let sampleBuffer = videoOutput.copyNextSampleBuffer() {
+    autoreleasepool {
+        // ... use ciCtx for both createCGImage and render ...
+    }
+}
+```
+
+3. Same `autoreleasepool` treatment for the audio sample loop.
+
+**Result:** Memory stays bounded at ~1.3–2.8 GB (oscillating as frames are processed and released), peak 2.8 GB. Previously grew linearly past 80 GB. Export completes in ~94 seconds for 1189 frames.
+
+**Lesson:** Any tight loop in macOS that creates Obj-C or Core Graphics objects (images, contexts, pixel buffers) MUST wrap the loop body in `autoreleasepool`. Without it, autorelease objects accumulate until the enclosing scope exits. This is especially critical for video processing where each frame creates multiple large image objects. Also, `CIContext` should always be reused — it's designed to be long-lived and amortizes internal setup costs across renders.

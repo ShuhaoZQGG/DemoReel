@@ -10,6 +10,7 @@ struct RecordingView: View {
     @State private var pickerCoordinator = SourcePickerCoordinator()
     @State private var timer: Timer?
     @State private var elapsedSeconds: Int = 0
+    @State private var isPaused: Bool = false
     @State private var errorMessage: String?
     @State private var hasAccessibilityPermission = false
     @State private var overlayPanel: RecordingOverlayPanel?
@@ -117,8 +118,8 @@ struct RecordingView: View {
                 .font(.system(.largeTitle, design: .monospaced))
                 .foregroundStyle(.primary)
 
-            Button("Stop Recording") {
-                Task { await stopRecording() }
+            Button("Finish Recording") {
+                Task { await finishRecording() }
             }
             .buttonStyle(.borderedProminent)
             .tint(.red)
@@ -177,9 +178,31 @@ struct RecordingView: View {
         }
     }
 
-    private func stopRecording() async {
+    private func togglePause() {
+        if isPaused {
+            // Resume
+            recorder.resume()
+            eventLogger.resumeLogging()
+            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+                elapsedSeconds += 1
+            }
+            isPaused = false
+        } else {
+            // Pause
+            timer?.invalidate()
+            timer = nil
+            recorder.pause()
+            eventLogger.pauseLogging()
+            isPaused = true
+        }
+    }
+
+    private func finishRecording() async {
         timer?.invalidate()
         timer = nil
+        isPaused = false
+
+        // Dismiss overlay first to ensure it disappears
         dismissOverlay()
 
         eventLogger.stopLogging()
@@ -210,7 +233,7 @@ struct RecordingView: View {
 
             // Show main window and switch to editor
             NSApplication.shared.activate(ignoringOtherApps: true)
-            for window in NSApplication.shared.windows where window !== overlayPanel {
+            for window in NSApplication.shared.windows where !(window is RecordingOverlayPanel) {
                 window.makeKeyAndOrderFront(nil)
             }
             appState.currentScreen = .editor
@@ -230,19 +253,39 @@ struct RecordingView: View {
     private func showOverlay() {
         let overlayView = RecordingOverlayView(
             elapsedSeconds: $elapsedSeconds,
-            onStop: { Task { await stopRecording() } }
+            isPaused: $isPaused,
+            onTogglePause: { togglePause() },
+            onFinish: { Task { await finishRecording() } }
         )
         let hostingView = NSHostingView(rootView: overlayView)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 220, height: 44)
 
-        let panel = RecordingOverlayPanel(contentView: hostingView)
+        // Wrap in a plain NSView to break Auto Layout constraint cycles.
+        // NSHostingView continuously recalculates constraints as SwiftUI state changes,
+        // which causes infinite update loops when used directly as a panel's contentView.
+        let panelSize = NSSize(width: 400, height: 56)
+        let wrapper = NSView(frame: NSRect(origin: .zero, size: panelSize))
+        wrapper.autoresizesSubviews = true
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        wrapper.addSubview(hostingView)
+        NSLayoutConstraint.activate([
+            hostingView.centerXAnchor.constraint(equalTo: wrapper.centerXAnchor),
+            hostingView.centerYAnchor.constraint(equalTo: wrapper.centerYAnchor),
+        ])
+
+        let panel = RecordingOverlayPanel(size: panelSize)
+        panel.contentView = wrapper
         panel.orderFront(nil)
         overlayPanel = panel
     }
 
     private func dismissOverlay() {
-        overlayPanel?.orderOut(nil)
+        overlayPanel?.close()
         overlayPanel = nil
+        // Also close any orphaned overlay panels (from previous recordings
+        // where the SwiftUI struct was destroyed before cleanup).
+        for window in NSApplication.shared.windows where window is RecordingOverlayPanel {
+            window.close()
+        }
     }
 
     // MARK: - Accessibility permission

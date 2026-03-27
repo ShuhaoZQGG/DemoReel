@@ -3,10 +3,11 @@ import SwiftUI
 /// Main editor layout: preview on top, timeline below, tabbed controls in sidebar.
 struct EditorView: View {
     @Bindable var appState: AppState
-    @State private var keyframes: [ZoomKeyframe] = []
     @State private var smoothedPoints: [SmoothedPoint] = []
     @State private var currentTime: Double = 0
+    @State private var timelinePosition: Double = 0
     @State private var isPlaying = false
+    @State private var playbackTimer: Timer?
     @State private var zoomConfig = defaultZoomConfig()
     @State private var styleConfig = defaultStyleConfig()
     @State private var cursorConfig = defaultCursorConfig()
@@ -16,6 +17,7 @@ struct EditorView: View {
     @State private var trimEnd: Double = 0
     @State private var videoWidth: Double = 0
     @State private var videoHeight: Double = 0
+    @State private var clipManager = ClipManager()
 
     enum SidebarTab: String, CaseIterable {
         case zoom = "Zoom"
@@ -28,9 +30,10 @@ struct EditorView: View {
             VStack(spacing: 0) {
                 PreviewView(
                     videoURL: appState.videoPath,
-                    keyframes: keyframes,
+                    keyframes: clipManager.zoomKeyframesForPreview(),
                     smoothedPoints: smoothedPoints,
                     currentTime: $currentTime,
+                    timelinePosition: timelinePosition,
                     isPlaying: $isPlaying,
                     zoomConfig: zoomConfig,
                     styleConfig: styleConfig,
@@ -43,14 +46,20 @@ struct EditorView: View {
                 Divider()
 
                 TimelineView(
-                    keyframes: keyframes,
                     duration: appState.recordingDuration,
                     currentTime: $currentTime,
+                    timelinePosition: $timelinePosition,
                     isPlaying: $isPlaying,
                     trimStart: $trimStart,
-                    trimEnd: $trimEnd
+                    trimEnd: $trimEnd,
+                    clipManager: clipManager,
+                    onSplit: splitAtPlayhead,
+                    onSplitZoom: splitZoomAtPlayhead,
+                    onSpeedChange: changeClipSpeed,
+                    onZoomScaleChange: changeZoomScale,
+                    onAddZoom: addZoomAtPlayhead
                 )
-                .frame(height: 140)
+                .frame(height: 200)
             }
 
             VStack(spacing: 0) {
@@ -110,6 +119,16 @@ struct EditorView: View {
             loadEventsAndGenerate()
             loadProjectSettingsIfNeeded()
         }
+        .onChange(of: isPlaying) { _, playing in
+            if playing {
+                startPlaybackTimer()
+            } else {
+                stopPlaybackTimer()
+            }
+        }
+        .onDisappear {
+            stopPlaybackTimer()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .saveProject)) { _ in
             saveProject()
         }
@@ -129,7 +148,7 @@ struct EditorView: View {
             videoHeight = Double(record.screenHeight)
         }
 
-        keyframes = generateZoomKeyframesWithConfig(
+        let generatedKeyframes = generateZoomKeyframesWithConfig(
             events: mouseEvents,
             config: zoomConfig
         )
@@ -138,6 +157,78 @@ struct EditorView: View {
         if trimEnd <= 0 {
             trimEnd = appState.recordingDuration
         }
+
+        if clipManager.clips.isEmpty {
+            clipManager.initializeFromTrim(
+                startMs: UInt64(trimStart * 1000),
+                endMs: UInt64(trimEnd * 1000)
+            )
+        }
+
+        // Initialize zoom clips from auto-generated keyframes
+        clipManager.initializeZoomClips(from: generatedKeyframes)
+    }
+
+    private func splitAtPlayhead() {
+        guard currentTime >= 0 else { return } // can't split in a gap
+        let sourceMs = UInt64(currentTime * 1000)
+        clipManager.split(atSourceTimeMs: sourceMs)
+    }
+
+    private func splitZoomAtPlayhead() {
+        let timelineMs = UInt64(timelinePosition * 1000)
+        clipManager.splitZoomClip(atTimelineMs: timelineMs)
+    }
+
+    private func changeClipSpeed(_ speed: Double) {
+        let sourceMs = UInt64(max(0, currentTime) * 1000)
+        guard let index = clipManager.clips.firstIndex(where: { $0.sourceStartMs <= sourceMs && $0.sourceEndMs > sourceMs }) else { return }
+        clipManager.clips[index].speed = speed
+    }
+
+    private func addZoomAtPlayhead() {
+        let timelineMs = UInt64(timelinePosition * 1000)
+        clipManager.addZoomClip(
+            atTimelineMs: timelineMs,
+            durationMs: 1000,
+            centerX: 0.5,
+            centerY: 0.5,
+            scale: zoomConfig.scale
+        )
+    }
+
+    private func changeZoomScale(_ scale: Double) {
+        let timelineMs = UInt64(timelinePosition * 1000)
+        if let index = clipManager.zoomClips.firstIndex(where: { timelineMs >= $0.timelineStartMs && timelineMs < $0.timelineEndMs }) {
+            clipManager.zoomClips[index].scale = scale
+        }
+    }
+
+    // MARK: - Timer-Driven Playback
+
+    private func startPlaybackTimer() {
+        stopPlaybackTimer()
+        playbackTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [self] _ in
+            let dt = 1.0 / 30.0
+            timelinePosition += dt
+
+            if let (sourceMs, _) = clipManager.sourceTimeForTimelinePosition(timelinePosition) {
+                currentTime = Double(sourceMs) / 1000.0
+            } else {
+                // In a gap — show black/nothing
+                currentTime = -1
+
+                // Check if we're past all clips
+                if UInt64(timelinePosition * 1000) >= clipManager.timelineEndMs {
+                    isPlaying = false
+                }
+            }
+        }
+    }
+
+    private func stopPlaybackTimer() {
+        playbackTimer?.invalidate()
+        playbackTimer = nil
     }
 
     private func regenerateKeyframes() {
@@ -145,10 +236,12 @@ struct EditorView: View {
         guard let json = try? String(contentsOf: eventsPath, encoding: .utf8) else { return }
         guard let mouseEvents = try? mouseEventsFromLog(json: json) else { return }
 
-        keyframes = generateZoomKeyframesWithConfig(
+        let generatedKeyframes = generateZoomKeyframesWithConfig(
             events: mouseEvents,
             config: zoomConfig
         )
+        // Additive: only add non-overlapping new zoom clips, preserving manual edits
+        clipManager.regenerateZoomClips(from: generatedKeyframes)
     }
 
     private func loadProjectSettingsIfNeeded() {
@@ -187,6 +280,7 @@ struct EditorView: View {
         trimEnd = Double(project.trimEndMs) / 1000.0
 
         regenerateKeyframes()
+        loadClips(projectURL: projectPath)
     }
 
     private func saveProject() {
@@ -234,11 +328,39 @@ struct EditorView: View {
         do {
             try DemoReel.saveProject(project: project, path: url.path)
             appState.projectPath = url
+            // Save clips sidecar
+            saveClips(projectURL: url)
         } catch {
             let alert = NSAlert()
             alert.messageText = "Failed to save project"
             alert.informativeText = error.localizedDescription
             alert.runModal()
+        }
+    }
+
+    private func saveClips(projectURL: URL) {
+        let clipsURL = projectURL.appendingPathExtension("clips.json")
+        if let data = try? JSONEncoder().encode(clipManager.clips) {
+            try? data.write(to: clipsURL)
+        }
+        // Save zoom clips
+        let zoomURL = projectURL.appendingPathExtension("zoomclips.json")
+        if let data = try? JSONEncoder().encode(clipManager.zoomClips) {
+            try? data.write(to: zoomURL)
+        }
+    }
+
+    private func loadClips(projectURL: URL) {
+        let clipsURL = projectURL.appendingPathExtension("clips.json")
+        if let data = try? Data(contentsOf: clipsURL),
+           let clips = try? JSONDecoder().decode([Clip].self, from: data) {
+            clipManager.clips = clips
+        }
+        // Load zoom clips
+        let zoomURL = projectURL.appendingPathExtension("zoomclips.json")
+        if let data = try? Data(contentsOf: zoomURL),
+           let zoomClips = try? JSONDecoder().decode([ZoomClip].self, from: data) {
+            clipManager.zoomClips = zoomClips
         }
     }
 }
