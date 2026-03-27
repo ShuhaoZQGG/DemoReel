@@ -24,7 +24,6 @@ pub fn smooth_cursor_path(positions: &[MouseEvent], alpha: f64) -> Vec<SmoothedP
     for i in 1..positions.len() {
         let prev_smoothed = &result[i - 1];
         let raw = &positions[i];
-
         let smoothed_x = alpha * raw.x + (1.0 - alpha) * prev_smoothed.x;
         let smoothed_y = alpha * raw.y + (1.0 - alpha) * prev_smoothed.y;
 

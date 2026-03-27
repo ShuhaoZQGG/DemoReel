@@ -1,8 +1,14 @@
 use crate::types::StyleConfig;
 
+/// Round up to the nearest even number (required by libx264 / yuv420p).
+fn round_to_even(n: u32) -> u32 {
+    (n + 1) & !1
+}
+
 /// Compute the output canvas dimensions given source video size and style config.
 ///
 /// Applies padding and aspect ratio to determine the final canvas.
+/// All returned dimensions are guaranteed to be even (required by H.264).
 pub fn compute_output_dimensions(
     source_width: u32,
     source_height: u32,
@@ -18,14 +24,14 @@ pub fn compute_output_dimensions(
             if current_ratio > target_ratio {
                 // Too wide — increase height
                 let new_h = (video_w as f64 / target_ratio).ceil() as u32;
-                (video_w, new_h)
+                (round_to_even(video_w), round_to_even(new_h))
             } else {
                 // Too tall — increase width
                 let new_w = (video_h as f64 * target_ratio).ceil() as u32;
-                (new_w, video_h)
+                (round_to_even(new_w), round_to_even(video_h))
             }
         }
-        None => (video_w, video_h), // "auto"
+        None => (round_to_even(video_w), round_to_even(video_h)),
     }
 }
 
