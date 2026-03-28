@@ -120,9 +120,9 @@ struct EditorView: View {
                 isPresented: $showExportSheet,
                 videoPath: appState.videoPath,
                 eventsPath: appState.eventsPath,
-                zoomConfig: zoomConfig,
-                styleConfig: styleConfig,
-                cursorConfig: cursorConfig,
+                zoomConfig: $zoomConfig,
+                styleConfig: $styleConfig,
+                cursorConfig: $cursorConfig,
                 clips: clipManager.clipsByTimelineOrder,
                 zoomKeyframes: clipManager.zoomKeyframesForPreview(),
                 zoomClips: clipManager.zoomClips

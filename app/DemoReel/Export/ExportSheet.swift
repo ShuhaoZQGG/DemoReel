@@ -6,9 +6,9 @@ struct ExportSheet: View {
     @Binding var isPresented: Bool
     let videoPath: URL?
     let eventsPath: URL?
-    let zoomConfig: ZoomConfig
-    let styleConfig: StyleConfig
-    let cursorConfig: CursorConfig
+    @Binding var zoomConfig: ZoomConfig
+    @Binding var styleConfig: StyleConfig
+    @Binding var cursorConfig: CursorConfig
     let clips: [Clip]
     let zoomKeyframes: [ZoomKeyframe]
     let zoomClips: [ZoomClip]

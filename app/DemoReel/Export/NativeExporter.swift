@@ -414,47 +414,28 @@ private struct ExportFrameView: View {
             let fracY = point.y / max(videoHeight, 1)
             let baseSize = 12.0 * cursorConfig.sizeMultiplier
 
-            Canvas { context, size in
-                let x = fracX * size.width
-                let y = fracY * size.height
+            // Use GeometryReader + standard SwiftUI views instead of Canvas,
+            // because Canvas does not render through ImageRenderer.
+            GeometryReader { geo in
+                let x = fracX * geo.size.width
+                let y = fracY * geo.size.height
 
                 if cursorConfig.cursorStyle == "circle" {
-                    if cursorConfig.clickHighlight {
-                        let highlightSize = baseSize * 2.5
-                        let highlightRect = CGRect(
-                            x: x - highlightSize / 2, y: y - highlightSize / 2,
-                            width: highlightSize, height: highlightSize
-                        )
-                        context.fill(
-                            Path(ellipseIn: highlightRect),
-                            with: .color(Color(hex: cursorConfig.highlightColorHex).opacity(0.25))
-                        )
+                    ZStack {
+                        if cursorConfig.clickHighlight {
+                            Circle()
+                                .fill(Color(hex: cursorConfig.highlightColorHex).opacity(0.25))
+                                .frame(width: baseSize * 2.5, height: baseSize * 2.5)
+                        }
+                        Circle()
+                            .fill(.white.opacity(0.9))
+                            .frame(width: baseSize, height: baseSize)
+                            .shadow(color: .black.opacity(0.3), radius: 2)
                     }
-                    let dotRect = CGRect(
-                        x: x - baseSize / 2, y: y - baseSize / 2,
-                        width: baseSize, height: baseSize
-                    )
-                    context.fill(
-                        Path(ellipseIn: dotRect),
-                        with: .color(.white.opacity(0.9))
-                    )
+                    .position(x: x, y: y)
                 } else if cursorConfig.cursorStyle == "system" {
-                    let cursorImage = NSCursor.arrow.image
-                    let cursorSize = CGSize(
-                        width: cursorImage.size.width * cursorConfig.sizeMultiplier,
-                        height: cursorImage.size.height * cursorConfig.sizeMultiplier
-                    )
-                    let hotSpot = NSCursor.arrow.hotSpot
-                    let drawRect = CGRect(
-                        x: x - hotSpot.x * cursorConfig.sizeMultiplier,
-                        y: y - hotSpot.y * cursorConfig.sizeMultiplier,
-                        width: cursorSize.width,
-                        height: cursorSize.height
-                    )
-                    context.draw(
-                        Image(nsImage: cursorImage),
-                        in: drawRect
-                    )
+                    SystemCursorView(sizeMultiplier: cursorConfig.sizeMultiplier)
+                        .position(x: x, y: y)
                 }
             }
         }
