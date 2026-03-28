@@ -9,6 +9,9 @@ struct ExportSheet: View {
     let zoomConfig: ZoomConfig
     let styleConfig: StyleConfig
     let cursorConfig: CursorConfig
+    let clips: [Clip]
+    let zoomKeyframes: [ZoomKeyframe]
+    let zoomClips: [ZoomClip]
 
     @State private var selectedFormat = "mp4"
     @State private var selectedResolution = "source"
@@ -179,6 +182,9 @@ struct ExportSheet: View {
         Task.detached {
             let exporter = NativeExporter(
                 config: config,
+                clips: self.clips,
+                zoomKeyframes: self.zoomKeyframes,
+                zoomClips: self.zoomClips,
                 onProgress: { manager.onProgress(progress: $0) },
                 onComplete: { manager.onComplete(outputPath: $0) },
                 onError: { manager.onError(message: $0) }

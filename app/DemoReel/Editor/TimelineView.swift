@@ -40,18 +40,19 @@ struct TimelineView: View {
     var onSpeedChange: (Double) -> Void
     var onZoomScaleChange: (Double) -> Void
     var onAddZoom: () -> Void
-
     @State private var pixelsPerSecond: Double = 100
-    @State private var selection: TrackSelection = .none
+    @Binding var selection: TrackSelection
     @State private var magnetedIds: Set<UUID> = []
     @State private var draggingClipId: UUID?
     @State private var dragOffset: CGFloat = 0
-    @State private var scissorModeActive: Bool = false
+    @Binding var scissorModeActive: Bool
+    @Binding var zoomPlacementActive: Bool
+    var zoomPlacementScale: Double
+    var onPlaceZoom: (UInt64) -> Void
     @State private var hoverTimelinePosition: Double? = nil
     @State private var hoveredVideoClipId: UUID? = nil
     @State private var hoveredZoomClipId: UUID? = nil
     @State private var hoveredTrack: HoveredTrack = .none
-    @FocusState private var isFocused: Bool
 
     enum HoveredTrack {
         case none, video, zoom
@@ -72,6 +73,11 @@ struct TimelineView: View {
         return clipManager.zoomClips.first(where: { posMs >= $0.timelineStartMs && posMs < $0.timelineEndMs })?.scale ?? 1.0
     }
 
+    private var selectedZoomEaseEnabled: Bool {
+        guard case .zoomClips(let ids) = selection else { return false }
+        return clipManager.zoomClips.filter { ids.contains($0.id) }.allSatisfy(\.easeEnabled)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             transportBar
@@ -79,19 +85,6 @@ struct TimelineView: View {
             timelineCanvas
         }
         .background(.background)
-        .onDeleteCommand { deleteSelected() }
-        .onExitCommand { scissorModeActive = false }
-        .onKeyPress("c") {
-            scissorModeActive.toggle()
-            return .handled
-        }
-        .onKeyPress("z") {
-            onAddZoom()
-            return .handled
-        }
-        .focusable()
-        .focused($isFocused)
-        .onAppear { isFocused = true }
     }
 
     // MARK: - Transport Bar
@@ -160,17 +153,21 @@ struct TimelineView: View {
 
             Divider().frame(height: 16)
 
-            // Add zoom clip at playhead
-            Button(action: onAddZoom) {
-                Image(systemName: "plus.circle")
+            // Add zoom clip placement mode
+            Button(action: {
+                zoomPlacementActive.toggle()
+                if zoomPlacementActive { scissorModeActive = false }
+            }) {
+                Image(systemName: zoomPlacementActive ? "plus.circle.fill" : "plus.circle")
             }
             .buttonStyle(.plain)
-            .help("Add zoom effect at playhead (Z)")
+            .foregroundStyle(zoomPlacementActive ? .green : .primary)
+            .help("Place zoom clip on timeline (click to place)")
 
             Divider().frame(height: 16)
 
             // Speed selector (video clips only)
-            if case .zoomClips = selection {
+            if case .zoomClips(let ids) = selection {
                 // Zoom scale selector
                 Menu {
                     ForEach([1.5, 2.0, 2.5, 3.0, 4.0], id: \.self) { scale in
@@ -185,6 +182,20 @@ struct TimelineView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
+
+                // Ease toggle for selected zoom clips
+                Button(action: {
+                    for id in ids {
+                        if let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id }) {
+                            clipManager.zoomClips[idx].easeEnabled.toggle()
+                        }
+                    }
+                }) {
+                    Image(systemName: selectedZoomEaseEnabled ? "wave.3.right.circle.fill" : "wave.3.right.circle")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(selectedZoomEaseEnabled ? .blue : .secondary)
+                .help("Toggle ease in/out regions")
             } else {
                 // Video speed selector
                 Menu {
@@ -279,6 +290,16 @@ struct TimelineView: View {
                             clipManager.zoomClips[idx].durationMs = max(newDuration, 100)
                         }
                     },
+                    onResizeEaseIn: { id, newEaseInMs in
+                        if let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id }) {
+                            clipManager.zoomClips[idx].easeInMs = newEaseInMs
+                        }
+                    },
+                    onResizeEaseOut: { id, newEaseOutMs in
+                        if let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id }) {
+                            clipManager.zoomClips[idx].easeOutMs = newEaseOutMs
+                        }
+                    },
                     hoverTimelinePositionMs: hoverTimelinePosition.map { UInt64($0 * 1000) },
                     onScissorCut: { timelineMs in
                         clipManager.splitZoomClip(atTimelineMs: timelineMs)
@@ -326,6 +347,22 @@ struct TimelineView: View {
                         .offset(x: hoverPos * pixelsPerSecond - 5, y: 6)
                         .allowsHitTesting(false)
                 }
+
+                // Zoom placement shadow (shown in placement mode while hovering)
+                if zoomPlacementActive, let hoverPos = hoverTimelinePosition {
+                    let shadowWidth = 1.0 * pixelsPerSecond // 1 second duration
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.green.opacity(0.3))
+                        .stroke(Color.green.opacity(0.8), lineWidth: 1.5)
+                        .frame(width: shadowWidth, height: 24)
+                        .offset(x: hoverPos * pixelsPerSecond, y: 60)
+                        .allowsHitTesting(false)
+                    Text(String(format: "%.1fx", zoomPlacementScale))
+                        .font(.system(size: 9))
+                        .foregroundStyle(.green)
+                        .offset(x: hoverPos * pixelsPerSecond + shadowWidth / 2, y: 60 + 12)
+                        .allowsHitTesting(false)
+                }
             }
             .frame(width: totalWidth, height: 160)
             .contentShape(Rectangle())
@@ -356,7 +393,7 @@ struct TimelineView: View {
                     }
 
                     // Cursor
-                    if scissorModeActive {
+                    if scissorModeActive || zoomPlacementActive {
                         NSCursor.crosshair.set()
                     }
                 case .ended:
@@ -372,10 +409,13 @@ struct TimelineView: View {
             .gesture(
                 SpatialTapGesture()
                     .onEnded { value in
-                        if scissorModeActive {
-                            let seconds = max(0, value.location.x / pixelsPerSecond)
-                            let timelineMs = UInt64(seconds * 1000)
+                        let seconds = max(0, value.location.x / pixelsPerSecond)
+                        let timelineMs = UInt64(seconds * 1000)
 
+                        if zoomPlacementActive {
+                            onPlaceZoom(timelineMs)
+                            zoomPlacementActive = false
+                        } else if scissorModeActive {
                             let y = value.location.y
                             if y >= 60 && y < 84 {
                                 clipManager.splitZoomClip(atTimelineMs: timelineMs)

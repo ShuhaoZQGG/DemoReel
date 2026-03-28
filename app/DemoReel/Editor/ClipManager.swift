@@ -128,19 +128,12 @@ final class ClipManager {
 
     var zoomClips: [ZoomClip] = []
 
-    /// Add a new zoom clip at the given timeline position. Returns false if it overlaps an existing clip.
-    @discardableResult
-    func addZoomClip(atTimelineMs ms: UInt64, durationMs: UInt64 = 1000, centerX: Double = 0.5, centerY: Double = 0.5, scale: Double = 2.0) -> Bool {
-        let newEnd = ms + durationMs
-        let overlaps = zoomClips.contains { zc in
-            ms < zc.timelineEndMs && newEnd > zc.timelineStartMs
-        }
-        guard !overlaps else { return false }
+    /// Add a new zoom clip at the given timeline position. Overlapping clips are allowed.
+    func addZoomClip(atTimelineMs ms: UInt64, durationMs: UInt64 = 1000, centerX: Double = 0.5, centerY: Double = 0.5, scale: Double = 2.0) {
         zoomClips.append(ZoomClip(
             timelineStartMs: ms, durationMs: durationMs,
             centerX: centerX, centerY: centerY, scale: scale
         ))
-        return true
     }
 
     /// Convert auto-generated keyframes to editable ZoomClips (only if empty).
@@ -229,6 +222,40 @@ final class ClipManager {
                 centerX: zc.centerX, centerY: zc.centerY, scale: zc.scale
             )
         }
+    }
+
+    /// Compute zoom scale at a given timeline timestamp, using per-clip ease values when enabled.
+    static func zoomScaleWithPerClipEase(
+        zoomClips: [ZoomClip],
+        timestampMs: UInt64,
+        globalConfig: ZoomConfig
+    ) -> Double {
+        for zc in zoomClips {
+            guard timestampMs >= zc.timelineStartMs && timestampMs <= zc.timelineEndMs else { continue }
+
+            let kf = [ZoomKeyframe(
+                startMs: zc.timelineStartMs, endMs: zc.timelineEndMs,
+                centerX: zc.centerX, centerY: zc.centerY, scale: zc.scale
+            )]
+
+            if zc.easeEnabled {
+                let holdMs = zc.durationMs > (zc.easeInMs + zc.easeOutMs)
+                    ? zc.durationMs - zc.easeInMs - zc.easeOutMs
+                    : 0
+                let perClipConfig = ZoomConfig(
+                    scale: zc.scale,
+                    easeInMs: zc.easeInMs,
+                    holdMs: holdMs,
+                    easeOutMs: zc.easeOutMs,
+                    mergeThresholdMs: globalConfig.mergeThresholdMs,
+                    enabled: true
+                )
+                return zoomScaleAt(keyframes: kf, timestampMs: timestampMs, config: perClipConfig)
+            } else {
+                return zoomScaleAt(keyframes: kf, timestampMs: timestampMs, config: globalConfig)
+            }
+        }
+        return 1.0
     }
 
     /// Map source time to timeline position (seconds), or nil if not on timeline.

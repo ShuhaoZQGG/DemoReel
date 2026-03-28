@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Renders and edits zoom clips on the timeline's zoom track.
-/// Supports drag to move, edge-resize, selection, and displays scale label.
+/// Supports drag to move, edge-resize, ease-in/out resize, selection, and displays scale label.
 struct ZoomClipTrack: View {
     let clipManager: ClipManager
     let pixelsPerSecond: Double
@@ -11,12 +11,14 @@ struct ZoomClipTrack: View {
     let magnetedZoomClipIds: Set<UUID>
     var hoveredZoomClipId: UUID? = nil
     var scissorModeActive: Bool = false
-    var onSelect: (UUID, Bool) -> Void  // (clipId, isCommandClick)
-    var onDragMove: (UUID, UInt64) -> Void  // (clipId, newTimelineMs)
-    var onResizeLeft: (UUID, UInt64) -> Void  // (clipId, newStartMs)
-    var onResizeRight: (UUID, UInt64) -> Void  // (clipId, newEndMs -> durationMs)
-    var hoverTimelinePositionMs: UInt64? = nil  // current hover position for scissor cut
-    var onScissorCut: ((UInt64) -> Void)? = nil  // (timelineMs) — cut zoom clip at this position
+    var onSelect: (UUID, Bool) -> Void
+    var onDragMove: (UUID, UInt64) -> Void
+    var onResizeLeft: (UUID, UInt64) -> Void
+    var onResizeRight: (UUID, UInt64) -> Void
+    var onResizeEaseIn: (UUID, UInt64) -> Void
+    var onResizeEaseOut: (UUID, UInt64) -> Void
+    var hoverTimelinePositionMs: UInt64? = nil
+    var onScissorCut: ((UInt64) -> Void)? = nil
 
     @State private var draggingId: UUID?
     @State private var dragOffset: Double = 0
@@ -28,15 +30,20 @@ struct ZoomClipTrack: View {
     enum ResizeEdge {
         case left(UUID)
         case right(UUID)
+        case easeIn(UUID)
+        case easeOut(UUID)
     }
 
     enum HoveredEdge: Equatable {
         case none
         case leftEdge(UUID)
         case rightEdge(UUID)
+        case easeInEdge(UUID)
+        case easeOutEdge(UUID)
     }
 
     private let edgeHitZone: Double = 10
+    private let easeEdgeHitZone: Double = 6
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -47,7 +54,6 @@ struct ZoomClipTrack: View {
                 let isSelected = selectedZoomClipIds.contains(zc.id)
                 let isMagneted = magnetedZoomClipIds.contains(zc.id)
 
-                // Compute visual adjustments for resize
                 let (visualX, visualWidth) = resizeVisuals(for: zc, baseX: x, baseWidth: width)
 
                 ZoomClipView(
@@ -57,17 +63,30 @@ struct ZoomClipTrack: View {
                     isMagneted: isMagneted,
                     isHovered: scissorModeActive && hoveredZoomClipId == zc.id,
                     leftEdgeHighlighted: hoveredEdge == .leftEdge(zc.id),
-                    rightEdgeHighlighted: hoveredEdge == .rightEdge(zc.id)
+                    rightEdgeHighlighted: hoveredEdge == .rightEdge(zc.id),
+                    easeInEdgeHighlighted: hoveredEdge == .easeInEdge(zc.id),
+                    easeOutEdgeHighlighted: hoveredEdge == .easeOutEdge(zc.id),
+                    easeInResizeOffset: easeInResizeVisualOffset(for: zc),
+                    easeOutResizeOffset: easeOutResizeVisualOffset(for: zc)
                 )
                 .onContinuousHover { phase in
                     switch phase {
                     case .active(let location):
                         let clipWidth = max(visualWidth, 8)
+                        let easeInWidth = zc.easeEnabled ? zc.easeInFraction * clipWidth : 0
+                        let easeOutWidth = zc.easeEnabled ? zc.easeOutFraction * clipWidth : 0
+
                         if location.x < edgeHitZone {
                             hoveredEdge = .leftEdge(zc.id)
                             NSCursor.resizeLeftRight.set()
                         } else if location.x > clipWidth - edgeHitZone {
                             hoveredEdge = .rightEdge(zc.id)
+                            NSCursor.resizeLeftRight.set()
+                        } else if zc.easeEnabled && abs(location.x - easeInWidth) < easeEdgeHitZone {
+                            hoveredEdge = .easeInEdge(zc.id)
+                            NSCursor.resizeLeftRight.set()
+                        } else if zc.easeEnabled && abs(location.x - (clipWidth - easeOutWidth)) < easeEdgeHitZone {
+                            hoveredEdge = .easeOutEdge(zc.id)
                             NSCursor.resizeLeftRight.set()
                         } else {
                             hoveredEdge = .none
@@ -94,21 +113,25 @@ struct ZoomClipTrack: View {
                     DragGesture(minimumDistance: 3)
                         .onChanged { value in
                             if !gestureLocked {
-                                // Lock gesture type based on where drag started
                                 let localX = value.startLocation.x
                                 let clipWidth = max(visualWidth, 8)
+                                let easeInWidth = zc.easeEnabled ? zc.easeInFraction * clipWidth : 0
+                                let easeOutWidth = zc.easeEnabled ? zc.easeOutFraction * clipWidth : 0
 
                                 if localX < edgeHitZone {
                                     resizingEdge = .left(zc.id)
                                 } else if localX > clipWidth - edgeHitZone {
                                     resizingEdge = .right(zc.id)
+                                } else if zc.easeEnabled && abs(localX - easeInWidth) < easeEdgeHitZone {
+                                    resizingEdge = .easeIn(zc.id)
+                                } else if zc.easeEnabled && abs(localX - (clipWidth - easeOutWidth)) < easeEdgeHitZone {
+                                    resizingEdge = .easeOut(zc.id)
                                 } else {
                                     draggingId = zc.id
                                 }
                                 gestureLocked = true
                             }
 
-                            // Update offset based on locked gesture type
                             if resizingEdge != nil {
                                 resizeOffset = value.translation.width
                             } else if draggingId != nil {
@@ -153,6 +176,18 @@ struct ZoomClipTrack: View {
         }
     }
 
+    /// Visual offset for ease-in boundary during drag (pixels, positive = wider ease-in)
+    private func easeInResizeVisualOffset(for zc: ZoomClip) -> Double {
+        guard case .easeIn(let id) = resizingEdge, id == zc.id else { return 0 }
+        return resizeOffset
+    }
+
+    /// Visual offset for ease-out boundary during drag (pixels, positive = wider ease-out)
+    private func easeOutResizeVisualOffset(for zc: ZoomClip) -> Double {
+        guard case .easeOut(let id) = resizingEdge, id == zc.id else { return 0 }
+        return -resizeOffset // negate: dragging left (negative) should grow the region
+    }
+
     private func applyResize(edge: ResizeEdge, zoomClip: ZoomClip, offset: Double) {
         let deltaMs = Int64(offset / pixelsPerSecond * 1000)
         let minDurationMs: UInt64 = 100
@@ -169,11 +204,25 @@ struct ZoomClipTrack: View {
                            Int64(zoomClip.timelineEndMs) + deltaMs)
             let newDuration = UInt64(newEnd) - zoomClip.timelineStartMs
             onResizeRight(id, newDuration)
+
+        case .easeIn(let id):
+            let newEaseIn = max(0, Int64(zoomClip.easeInMs) + deltaMs)
+            // Ensure ease-in + ease-out doesn't exceed duration - minBody
+            let maxEaseIn = Int64(zoomClip.durationMs) - Int64(zoomClip.easeOutMs) - Int64(minDurationMs)
+            let clamped = UInt64(max(0, min(newEaseIn, maxEaseIn)))
+            onResizeEaseIn(id, clamped)
+
+        case .easeOut(let id):
+            // Dragging left (negative offset) makes ease-out bigger
+            let newEaseOut = max(0, Int64(zoomClip.easeOutMs) - deltaMs)
+            let maxEaseOut = Int64(zoomClip.durationMs) - Int64(zoomClip.easeInMs) - Int64(minDurationMs)
+            let clamped = UInt64(max(0, min(newEaseOut, maxEaseOut)))
+            onResizeEaseOut(id, clamped)
         }
     }
 }
 
-/// Renders a single zoom clip as a styled rounded rectangle.
+/// Renders a single zoom clip as a styled rounded rectangle with optional ease-in/out regions.
 struct ZoomClipView: View {
     let zoomClip: ZoomClip
     let width: Double
@@ -182,13 +231,72 @@ struct ZoomClipView: View {
     var isHovered: Bool = false
     var leftEdgeHighlighted: Bool = false
     var rightEdgeHighlighted: Bool = false
+    var easeInEdgeHighlighted: Bool = false
+    var easeOutEdgeHighlighted: Bool = false
+    var easeInResizeOffset: Double = 0
+    var easeOutResizeOffset: Double = 0
 
     var body: some View {
         ZStack(alignment: .leading) {
+            // Base fill
             RoundedRectangle(cornerRadius: 4)
                 .fill(fillColor)
+
+            // Ease-in gradient overlay
+            if zoomClip.easeEnabled {
+                let easeInWidth = max(0, zoomClip.easeInFraction * width + easeInResizeOffset)
+                if easeInWidth > 0 {
+                    LinearGradient(
+                        colors: [Color.blue.opacity(0.0), fillColor],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: easeInWidth, height: 24)
+                    .clipShape(UnevenRoundedRectangle(
+                        topLeadingRadius: 4, bottomLeadingRadius: 4,
+                        bottomTrailingRadius: 0, topTrailingRadius: 0
+                    ))
+
+                    // Ease-in boundary line
+                    Rectangle()
+                        .fill(easeInEdgeHighlighted ? Color.orange : Color.blue.opacity(0.4))
+                        .frame(width: easeInEdgeHighlighted ? 2 : 1, height: 20)
+                        .offset(x: easeInWidth)
+                }
+
+                // Ease-out gradient overlay
+                let easeOutWidth = max(0, zoomClip.easeOutFraction * width + easeOutResizeOffset)
+                if easeOutWidth > 0 {
+                    HStack {
+                        Spacer(minLength: 0)
+                        LinearGradient(
+                            colors: [fillColor, Color.blue.opacity(0.0)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: easeOutWidth, height: 24)
+                        .clipShape(UnevenRoundedRectangle(
+                            topLeadingRadius: 0, bottomLeadingRadius: 0,
+                            bottomTrailingRadius: 4, topTrailingRadius: 4
+                        ))
+                    }
+
+                    // Ease-out boundary line
+                    HStack {
+                        Spacer(minLength: 0)
+                        Rectangle()
+                            .fill(easeOutEdgeHighlighted ? Color.orange : Color.blue.opacity(0.4))
+                            .frame(width: easeOutEdgeHighlighted ? 2 : 1, height: 20)
+                            .padding(.trailing, easeOutWidth)
+                    }
+                }
+            }
+
+            // Border
             RoundedRectangle(cornerRadius: 4)
                 .strokeBorder(borderColor, lineWidth: (isMagneted || isHovered) ? 2 : 1)
+
+            // Scale label
             Text(String(format: "%.1fx", zoomClip.scale))
                 .font(.system(size: 9, design: .monospaced))
                 .foregroundStyle(isSelected ? .purple : .blue)

@@ -30,6 +30,7 @@
 		C89525FE9EAC4F23A488A189 /* Clip.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC4430EDE543472288D033FF /* Clip.swift */; };
 		110F775863484220912E0FE0 /* ClipManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56BFD65D09CD44C780A31EBF /* ClipManager.swift */; };
 		AA1122334455667788990011 /* ZoomClip.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1122334455667788990011 /* ZoomClip.swift */; };
+		CC2233445566778899001122 /* KeyboardShortcutMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD2233445566778899001122 /* KeyboardShortcutMonitor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -60,6 +61,7 @@
 		DC4430EDE543472288D033FF /* Clip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clip.swift; sourceTree = "<group>"; };
 		56BFD65D09CD44C780A31EBF /* ClipManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipManager.swift; sourceTree = "<group>"; };
 		BB1122334455667788990011 /* ZoomClip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomClip.swift; sourceTree = "<group>"; };
+		DD2233445566778899001122 /* KeyboardShortcutMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutMonitor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -141,6 +143,7 @@
 			children = (
 				AFF32E808D120C70E6836921 /* CursorPanel.swift */,
 				8A6FA81971BB9558E8413156 /* EditorView.swift */,
+				DD2233445566778899001122 /* KeyboardShortcutMonitor.swift */,
 				DC4430EDE543472288D033FF /* Clip.swift */,
 				56BFD65D09CD44C780A31EBF /* ClipManager.swift */,
 				83BFDD4820105159572DDDF2 /* PreviewView.swift */,
@@ -217,6 +220,7 @@
 				C89525FE9EAC4F23A488A189 /* Clip.swift in Sources */,
 				110F775863484220912E0FE0 /* ClipManager.swift in Sources */,
 				AA1122334455667788990011 /* ZoomClip.swift in Sources */,
+				CC2233445566778899001122 /* KeyboardShortcutMonitor.swift in Sources */,
 				60BE27B07798ABFD43A504A6 /* EventLogger.swift in Sources */,
 				F1D1A3D267F35F65D8D6A79C /* ExportManager.swift in Sources */,
 				AF196859F30BBE74890B81FA /* ExportSheet.swift in Sources */,

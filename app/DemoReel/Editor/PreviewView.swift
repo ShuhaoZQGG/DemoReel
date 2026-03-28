@@ -5,6 +5,7 @@ import AVFoundation
 struct PreviewView: View {
     let videoURL: URL?
     let keyframes: [ZoomKeyframe]
+    let zoomClips: [ZoomClip]
     let smoothedPoints: [SmoothedPoint]
     @Binding var currentTime: Double
     let timelinePosition: Double
@@ -246,10 +247,10 @@ struct PreviewView: View {
     private var currentScale: Double {
         // Use timeline position (zoom clips are in timeline coordinates)
         let timestampMs = UInt64(max(0, timelinePosition) * 1000)
-        return zoomScaleAt(
-            keyframes: keyframes,
+        return ClipManager.zoomScaleWithPerClipEase(
+            zoomClips: zoomClips,
             timestampMs: timestampMs,
-            config: zoomConfig
+            globalConfig: zoomConfig
         )
     }
 

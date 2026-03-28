@@ -6,17 +6,29 @@ import SwiftUI
 /// Native macOS video exporter that uses SwiftUI's ImageRenderer to render
 /// each frame with the EXACT same view pipeline as the preview — guaranteeing
 /// pixel-perfect output matching what the user sees in the editor.
+///
+/// The exporter processes clips in timeline order, respecting clip boundaries,
+/// ordering, gaps, and zoom keyframes from the editor's ClipManager.
 final class NativeExporter {
     private let config: ExportConfig
+    private let clips: [Clip]
+    private let zoomKeyframes: [ZoomKeyframe]
+    private let zoomClips: [ZoomClip]
     private let onProgress: (ExportProgress) -> Void
     private let onComplete: (String) -> Void
     private let onError: (String) -> Void
 
     init(config: ExportConfig,
+         clips: [Clip],
+         zoomKeyframes: [ZoomKeyframe],
+         zoomClips: [ZoomClip] = [],
          onProgress: @escaping (ExportProgress) -> Void,
          onComplete: @escaping (String) -> Void,
          onError: @escaping (String) -> Void) {
         self.config = config
+        self.clips = clips
+        self.zoomKeyframes = zoomKeyframes
+        self.zoomClips = zoomClips
         self.onProgress = onProgress
         self.onComplete = onComplete
         self.onError = onError
@@ -59,10 +71,9 @@ final class NativeExporter {
         let naturalSize = videoTrack.naturalSize
         let sourceW = Double(naturalSize.width)
         let sourceH = Double(naturalSize.height)
-        let duration = asset.duration
         let sourceFps = Double(videoTrack.nominalFrameRate)
         let fps = config.fps > 0 ? Double(config.fps) : sourceFps
-        let totalFrames = Int(CMTimeGetSeconds(duration) * fps)
+        let frameDurationMs = 1000.0 / fps
 
         // --- Compute output dimensions ---
         let dims = computeOutputDimensions(
@@ -73,39 +84,26 @@ final class NativeExporter {
         let outputW = config.outputWidth > 0 ? Int(config.outputWidth) : Int(dims[0])
         let outputH = config.outputHeight > 0 ? Int(config.outputHeight) : Int(dims[1])
 
-        // --- Load zoom keyframes and cursor data ---
+        // --- Load cursor data from events ---
         let eventsJson = (try? String(contentsOfFile: config.eventsJsonPath, encoding: .utf8)) ?? "{}"
         let mouseEvents = (try? mouseEventsFromLog(json: eventsJson)) ?? []
-        let keyframes: [ZoomKeyframe] = config.zoomConfig.enabled
-            ? generateZoomKeyframesWithConfig(events: mouseEvents, config: config.zoomConfig)
-            : []
         let smoothedPts = smoothCursorPath(positions: mouseEvents, alpha: 0.3)
 
         // Use screen dimensions from event log for cursor/zoom coordinate mapping
-        // (cursor coords are in screen points, not video pixels — differs on Retina)
         let eventLog = try? parseEventLog(json: eventsJson)
         let screenW = Double(eventLog?.screenWidth ?? UInt32(sourceW))
         let screenH = Double(eventLog?.screenHeight ?? UInt32(sourceH))
 
+        // --- Determine clips to export ---
+        // Sort clips by timeline position; use editor zoom keyframes (not auto-generated)
+        let sortedClips = clips.sorted(by: { $0.timelineStartMs < $1.timelineStartMs })
+        let keyframes = zoomKeyframes
+
+        // Calculate total timeline duration for progress reporting
+        let timelineEndMs = sortedClips.map(\.timelineEndMs).max() ?? 0
+        let totalFrames = Int(Double(timelineEndMs) / frameDurationMs)
+
         onProgress(ExportProgress(percent: 5, stage: "Setting up encoder..."))
-
-        // --- Setup AVAssetReader ---
-        let reader = try AVAssetReader(asset: asset)
-        let videoOutput = AVAssetReaderTrackOutput(track: videoTrack, outputSettings: [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-        ])
-        videoOutput.alwaysCopiesSampleData = false
-        reader.add(videoOutput)
-
-        // Audio track (passthrough)
-        let audioTrack = asset.tracks(withMediaType: .audio).first
-        var audioOutput: AVAssetReaderTrackOutput?
-        if let at = audioTrack {
-            let ao = AVAssetReaderTrackOutput(track: at, outputSettings: nil)
-            ao.alwaysCopiesSampleData = false
-            reader.add(ao)
-            audioOutput = ao
-        }
 
         // --- Setup AVAssetWriter ---
         let outputURL = URL(fileURLWithPath: config.outputPath)
@@ -135,18 +133,10 @@ final class NativeExporter {
         )
         writer.add(writerVideoInput)
 
-        var writerAudioInput: AVAssetWriterInput?
-        if audioTrack != nil {
-            let ai = AVAssetWriterInput(mediaType: .audio, outputSettings: nil)
-            ai.expectsMediaDataInRealTime = false
-            writer.add(ai)
-            writerAudioInput = ai
-        }
+        // Audio: skip for now — clip-aware audio mixing is complex and the
+        // sequential passthrough would be wrong for reordered clips.
+        // TODO: Add clip-aware audio export
 
-        // --- Start reading/writing ---
-        guard reader.startReading() else {
-            throw fail("AVAssetReader failed: \(reader.error?.localizedDescription ?? "unknown")")
-        }
         guard writer.startWriting() else {
             throw fail("AVAssetWriter failed: \(writer.error?.localizedDescription ?? "unknown")")
         }
@@ -154,106 +144,170 @@ final class NativeExporter {
 
         onProgress(ExportProgress(percent: 10, stage: "Encoding..."))
 
-        // --- Frame-by-frame processing using SwiftUI ImageRenderer ---
         let outputSize = CGSize(width: outputW, height: outputH)
-        let ciCtx = CIContext()  // Reuse one CIContext for all frames
-        var frameIndex = 0
+        let ciCtx = CIContext()
+        var outputFrameIndex = 0
 
-        while let sampleBuffer = videoOutput.copyNextSampleBuffer() {
-            autoreleasepool {
-                while !writerVideoInput.isReadyForMoreMediaData {
-                    Thread.sleep(forTimeInterval: 0.005)
-                }
-
-                let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-                let timeSeconds = CMTimeGetSeconds(presentationTime)
-                let timestampMs = UInt64(max(0, timeSeconds) * 1000)
-
-                guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-
-                // Convert pixel buffer to NSImage for SwiftUI
-                let ciImage = CIImage(cvPixelBuffer: imageBuffer)
-                let rep = NSCIImageRep(ciImage: ciImage)
-                let nsImage = NSImage(size: rep.size)
-                nsImage.addRepresentation(rep)
-
-                // Compute zoom state at this frame's timestamp (same functions as preview)
-                let scale = zoomScaleAt(keyframes: keyframes, timestampMs: timestampMs, config: config.zoomConfig)
-                let centerVec = zoomCenterAt(keyframes: keyframes, timestampMs: timestampMs)
-                let anchor: UnitPoint
-                if centerVec.count == 2, screenW > 0, screenH > 0 {
-                    let ax = min(max(centerVec[0] / screenW, 0), 1)
-                    let ay = min(max(centerVec[1] / screenH, 0), 1)
-                    anchor = UnitPoint(x: ax, y: ay)
-                } else {
-                    anchor = .center
-                }
-
-                // Find cursor position
-                let cursorPoint = smoothedPts.last(where: { $0.timestampMs <= timestampMs })
-
-                // Build the SAME SwiftUI view as PreviewView uses
-                let frameView = ExportFrameView(
-                    frameImage: nsImage,
-                    scale: scale,
-                    zoomAnchor: anchor,
-                    cursorPoint: cursorPoint,
-                    styleConfig: config.styleConfig,
-                    cursorConfig: config.cursorConfig,
-                    videoWidth: screenW,
-                    videoHeight: screenH,
-                    outputSize: outputSize
-                )
-
-                // Render SwiftUI view to CGImage (on main thread)
-                guard let cgImage = renderOnMain(frameView, size: outputSize) else { return }
-
-                // Write CGImage to pixel buffer
-                guard let pool = adaptor.pixelBufferPool else { return }
-                var outputBuffer: CVPixelBuffer?
-                CVPixelBufferPoolCreatePixelBuffer(nil, pool, &outputBuffer)
-                guard let outputBuffer else { return }
-
-                CVPixelBufferLockBaseAddress(outputBuffer, [])
-                let ciImg = CIImage(cgImage: cgImage)
-                ciCtx.render(ciImg, to: outputBuffer)
-                CVPixelBufferUnlockBaseAddress(outputBuffer, [])
-
-                adaptor.append(outputBuffer, withPresentationTime: presentationTime)
-
-                frameIndex += 1
-                if frameIndex % 10 == 0 {
-                    let pct = 10.0 + Double(frameIndex) / Double(max(totalFrames, 1)) * 80.0
-                    onProgress(ExportProgress(percent: min(pct, 90), stage: "Encoding..."))
-                }
-            }
+        // If no clips exist, fall back to a single clip spanning the full source video.
+        let effectiveClips: [Clip]
+        if sortedClips.isEmpty {
+            let durationMs = UInt64(CMTimeGetSeconds(asset.duration) * 1000)
+            effectiveClips = [Clip(sourceStartMs: 0, sourceEndMs: durationMs, timelineStartMs: 0)]
+        } else {
+            effectiveClips = sortedClips
         }
 
-        // Write audio
-        if let audioOutput, let writerAudioInput {
-            while let audioSample = audioOutput.copyNextSampleBuffer() {
-                autoreleasepool {
-                    while !writerAudioInput.isReadyForMoreMediaData {
-                        Thread.sleep(forTimeInterval: 0.005)
+        // --- Process each clip in timeline order ---
+        for clip in effectiveClips {
+            // Fill gap before this clip with black frames
+            let expectedTimelineMs = UInt64(Double(outputFrameIndex) * frameDurationMs)
+            if clip.timelineStartMs > expectedTimelineMs {
+                let gapFrames = Int(Double(clip.timelineStartMs - expectedTimelineMs) / frameDurationMs)
+                for _ in 0..<gapFrames {
+                    autoreleasepool {
+                        while !writerVideoInput.isReadyForMoreMediaData {
+                            Thread.sleep(forTimeInterval: 0.005)
+                        }
+                        let presentTime = CMTime(value: Int64(outputFrameIndex), timescale: CMTimeScale(fps))
+
+                        let frameView = ExportFrameView(
+                            frameImage: nil,
+                            scale: 1.0,
+                            zoomAnchor: .center,
+                            cursorPoint: nil,
+                            styleConfig: config.styleConfig,
+                            cursorConfig: config.cursorConfig,
+                            videoWidth: screenW,
+                            videoHeight: screenH,
+                            outputSize: outputSize
+                        )
+                        if let cgImage = renderOnMain(frameView, size: outputSize),
+                           let pool = adaptor.pixelBufferPool {
+                            var buf: CVPixelBuffer?
+                            CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buf)
+                            if let buf {
+                                CVPixelBufferLockBaseAddress(buf, [])
+                                ciCtx.render(CIImage(cgImage: cgImage), to: buf)
+                                CVPixelBufferUnlockBaseAddress(buf, [])
+                                adaptor.append(buf, withPresentationTime: presentTime)
+                            }
+                        }
+                        outputFrameIndex += 1
                     }
-                    writerAudioInput.append(audioSample)
                 }
             }
+
+            // Read frames for this clip using a time-ranged AVAssetReader
+            let clipStartTime = CMTime(value: Int64(clip.sourceStartMs), timescale: 1000)
+            let clipEndTime = CMTime(value: Int64(clip.sourceEndMs), timescale: 1000)
+            let timeRange = CMTimeRange(start: clipStartTime, end: clipEndTime)
+
+            let clipReader = try AVAssetReader(asset: asset)
+            clipReader.timeRange = timeRange
+            let clipVideoOutput = AVAssetReaderTrackOutput(track: videoTrack, outputSettings: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            ])
+            clipVideoOutput.alwaysCopiesSampleData = false
+            clipReader.add(clipVideoOutput)
+
+            guard clipReader.startReading() else {
+                throw fail("AVAssetReader failed for clip: \(clipReader.error?.localizedDescription ?? "unknown")")
+            }
+
+            while let sampleBuffer = clipVideoOutput.copyNextSampleBuffer() {
+                autoreleasepool {
+                    while !writerVideoInput.isReadyForMoreMediaData {
+                        Thread.sleep(forTimeInterval: 0.005)
+                    }
+
+                    let sourcePTS = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                    let sourceTimeMs = UInt64(max(0, CMTimeGetSeconds(sourcePTS)) * 1000)
+
+                    // Map source time to timeline time for zoom lookup
+                    let offsetInClipMs = sourceTimeMs >= clip.sourceStartMs
+                        ? sourceTimeMs - clip.sourceStartMs
+                        : 0
+                    let timelineMs = clip.timelineStartMs + offsetInClipMs
+
+                    // Use strictly monotonic frame-counter PTS for output
+                    let outputPTS = CMTime(value: Int64(outputFrameIndex), timescale: CMTimeScale(fps))
+
+                    guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+
+                    // Convert pixel buffer to NSImage for SwiftUI
+                    let ciImage = CIImage(cvPixelBuffer: imageBuffer)
+                    let rep = NSCIImageRep(ciImage: ciImage)
+                    let nsImage = NSImage(size: rep.size)
+                    nsImage.addRepresentation(rep)
+
+                    // Compute zoom state using TIMELINE time (matches preview)
+                    let scale = zoomClips.isEmpty
+                        ? zoomScaleAt(keyframes: keyframes, timestampMs: timelineMs, config: config.zoomConfig)
+                        : ClipManager.zoomScaleWithPerClipEase(zoomClips: zoomClips, timestampMs: timelineMs, globalConfig: config.zoomConfig)
+                    let centerVec = zoomCenterAt(keyframes: keyframes, timestampMs: timelineMs)
+                    let anchor: UnitPoint
+                    if centerVec.count == 2, screenW > 0, screenH > 0 {
+                        let ax = min(max(centerVec[0] / screenW, 0), 1)
+                        let ay = min(max(centerVec[1] / screenH, 0), 1)
+                        anchor = UnitPoint(x: ax, y: ay)
+                    } else {
+                        anchor = .center
+                    }
+
+                    // Find cursor position using SOURCE time (cursor data is in source coordinates)
+                    let cursorPoint = smoothedPts.last(where: { $0.timestampMs <= sourceTimeMs })
+
+                    let frameView = ExportFrameView(
+                        frameImage: nsImage,
+                        scale: scale,
+                        zoomAnchor: anchor,
+                        cursorPoint: cursorPoint,
+                        styleConfig: config.styleConfig,
+                        cursorConfig: config.cursorConfig,
+                        videoWidth: screenW,
+                        videoHeight: screenH,
+                        outputSize: outputSize
+                    )
+
+                    guard let cgImage = renderOnMain(frameView, size: outputSize) else { return }
+
+                    guard let pool = adaptor.pixelBufferPool else { return }
+                    var outputBuffer: CVPixelBuffer?
+                    CVPixelBufferPoolCreatePixelBuffer(nil, pool, &outputBuffer)
+                    guard let outputBuffer else { return }
+
+                    CVPixelBufferLockBaseAddress(outputBuffer, [])
+                    let ciImg = CIImage(cgImage: cgImage)
+                    ciCtx.render(ciImg, to: outputBuffer)
+                    CVPixelBufferUnlockBaseAddress(outputBuffer, [])
+
+                    adaptor.append(outputBuffer, withPresentationTime: outputPTS)
+
+                    outputFrameIndex += 1
+                    if outputFrameIndex % 10 == 0 {
+                        let pct = 10.0 + Double(outputFrameIndex) / Double(max(totalFrames, 1)) * 80.0
+                        onProgress(ExportProgress(percent: min(pct, 90), stage: "Encoding..."))
+                    }
+                }
+            }
+
+            clipReader.cancelReading()
         }
 
         // --- Finish ---
         writerVideoInput.markAsFinished()
-        writerAudioInput?.markAsFinished()
 
         let sem = DispatchSemaphore(value: 0)
         writer.finishWriting { sem.signal() }
         sem.wait()
 
         if writer.status == .failed {
-            throw fail("AVAssetWriter failed: \(writer.error?.localizedDescription ?? "unknown")")
+            throw fail("AVAssetWriter failed (\(outputFrameIndex) frames written): \(writer.error?.localizedDescription ?? "unknown")")
         }
 
-        reader.cancelReading()
+        if outputFrameIndex == 0 {
+            throw fail("No frames were exported — clips may be empty or out of range")
+        }
 
         onProgress(ExportProgress(percent: 100, stage: "Complete"))
         onComplete(config.outputPath)
@@ -264,7 +318,7 @@ final class NativeExporter {
 // Uses the EXACT same modifiers as PreviewView to guarantee pixel-perfect output.
 
 private struct ExportFrameView: View {
-    let frameImage: NSImage
+    let frameImage: NSImage?
     let scale: Double
     let zoomAnchor: UnitPoint
     let cursorPoint: SmoothedPoint?
@@ -279,16 +333,19 @@ private struct ExportFrameView: View {
             // Background — same as PreviewView.backgroundView
             backgroundView
 
-            // Video + cursor composite — same transform chain as PreviewView
-            videoWithCursor
-                .clipShape(RoundedRectangle(cornerRadius: styleConfig.cornerRadius))
-                .shadow(
-                    color: .black.opacity(styleConfig.shadowEnabled ? styleConfig.shadowIntensity * 0.6 : 0),
-                    radius: styleConfig.shadowEnabled ? 20 * styleConfig.shadowIntensity : 0,
-                    y: styleConfig.shadowEnabled ? 10 * styleConfig.shadowIntensity : 0
-                )
-                .scaleEffect(scale, anchor: zoomAnchor)
-                .padding(styleConfig.padding)
+            if let frameImage {
+                // Video + cursor composite — same transform chain as PreviewView
+                videoWithCursor(image: frameImage)
+                    .clipShape(RoundedRectangle(cornerRadius: styleConfig.cornerRadius))
+                    .shadow(
+                        color: .black.opacity(styleConfig.shadowEnabled ? styleConfig.shadowIntensity * 0.6 : 0),
+                        radius: styleConfig.shadowEnabled ? 20 * styleConfig.shadowIntensity : 0,
+                        y: styleConfig.shadowEnabled ? 10 * styleConfig.shadowIntensity : 0
+                    )
+                    .scaleEffect(scale, anchor: zoomAnchor)
+                    .padding(styleConfig.padding)
+            }
+            // If frameImage is nil, we're in a gap — just show background (black)
         }
         .frame(width: outputSize.width, height: outputSize.height)
         .clipped()
@@ -296,20 +353,25 @@ private struct ExportFrameView: View {
 
     @ViewBuilder
     private var backgroundView: some View {
-        switch styleConfig.background.bgType {
-        case "gradient":
-            LinearGradient(
-                colors: [
-                    Color(hex: styleConfig.background.gradientFromHex),
-                    Color(hex: styleConfig.background.gradientToHex),
-                ],
-                startPoint: gradientStart,
-                endPoint: gradientEnd
-            )
-        case "transparent":
-            Color.white
-        default:
-            Color(hex: styleConfig.background.hex)
+        if frameImage == nil {
+            // Gap frame — show black
+            Color.black
+        } else {
+            switch styleConfig.background.bgType {
+            case "gradient":
+                LinearGradient(
+                    colors: [
+                        Color(hex: styleConfig.background.gradientFromHex),
+                        Color(hex: styleConfig.background.gradientToHex),
+                    ],
+                    startPoint: gradientStart,
+                    endPoint: gradientEnd
+                )
+            case "transparent":
+                Color.white
+            default:
+                Color(hex: styleConfig.background.hex)
+            }
         }
     }
 
@@ -326,7 +388,7 @@ private struct ExportFrameView: View {
     }
 
     @ViewBuilder
-    private var videoWithCursor: some View {
+    private func videoWithCursor(image: NSImage) -> some View {
         let padding = styleConfig.padding
         let availW = outputSize.width - padding * 2
         let availH = outputSize.height - padding * 2
@@ -336,7 +398,7 @@ private struct ExportFrameView: View {
         let renderH = videoAspect > viewAspect ? availW / videoAspect : availH
 
         ZStack {
-            Image(nsImage: frameImage)
+            Image(nsImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
 

@@ -18,6 +18,10 @@ struct EditorView: View {
     @State private var videoWidth: Double = 0
     @State private var videoHeight: Double = 0
     @State private var clipManager = ClipManager()
+    @State private var scissorModeActive = false
+    @State private var zoomPlacementActive = false
+    @State private var selection: TrackSelection = .none
+    @State private var keyMonitor = KeyboardShortcutMonitor()
 
     enum SidebarTab: String, CaseIterable {
         case zoom = "Zoom"
@@ -31,6 +35,7 @@ struct EditorView: View {
                 PreviewView(
                     videoURL: appState.videoPath,
                     keyframes: clipManager.zoomKeyframesForPreview(),
+                    zoomClips: clipManager.zoomClips,
                     smoothedPoints: smoothedPoints,
                     currentTime: $currentTime,
                     timelinePosition: timelinePosition,
@@ -57,7 +62,12 @@ struct EditorView: View {
                     onSplitZoom: splitZoomAtPlayhead,
                     onSpeedChange: changeClipSpeed,
                     onZoomScaleChange: changeZoomScale,
-                    onAddZoom: addZoomAtPlayhead
+                    onAddZoom: addZoomAtPlayhead,
+                    selection: $selection,
+                    scissorModeActive: $scissorModeActive,
+                    zoomPlacementActive: $zoomPlacementActive,
+                    zoomPlacementScale: zoomConfig.scale,
+                    onPlaceZoom: { ms in placeZoomClip(atTimelineMs: ms) }
                 )
                 .frame(height: 200)
             }
@@ -112,12 +122,19 @@ struct EditorView: View {
                 eventsPath: appState.eventsPath,
                 zoomConfig: zoomConfig,
                 styleConfig: styleConfig,
-                cursorConfig: cursorConfig
+                cursorConfig: cursorConfig,
+                clips: clipManager.clipsByTimelineOrder,
+                zoomKeyframes: clipManager.zoomKeyframesForPreview(),
+                zoomClips: clipManager.zoomClips
             )
         }
         .task {
             loadEventsAndGenerate()
             loadProjectSettingsIfNeeded()
+        }
+        .onChange(of: keyMonitor.lastAction) { _, event in
+            guard let event else { return }
+            handleKeyAction(event.action)
         }
         .onChange(of: isPlaying) { _, playing in
             if playing {
@@ -186,6 +203,16 @@ struct EditorView: View {
         clipManager.clips[index].speed = speed
     }
 
+    private func placeZoomClip(atTimelineMs ms: UInt64) {
+        clipManager.addZoomClip(
+            atTimelineMs: ms,
+            durationMs: 1000,
+            centerX: 0.5,
+            centerY: 0.5,
+            scale: zoomConfig.scale
+        )
+    }
+
     private func addZoomAtPlayhead() {
         let timelineMs = UInt64(timelinePosition * 1000)
         clipManager.addZoomClip(
@@ -229,6 +256,33 @@ struct EditorView: View {
     private func stopPlaybackTimer() {
         playbackTimer?.invalidate()
         playbackTimer = nil
+    }
+
+    private func handleKeyAction(_ action: KeyboardShortcutMonitor.EditorAction) {
+        switch action {
+        case .toggleScissor:
+            scissorModeActive.toggle()
+            if scissorModeActive { zoomPlacementActive = false }
+        case .addZoom:
+            addZoomAtPlayhead()
+        case .deleteSelection:
+            deleteSelected()
+        case .deactivateScissor:
+            scissorModeActive = false
+            zoomPlacementActive = false
+        }
+    }
+
+    private func deleteSelected() {
+        switch selection {
+        case .videoClips(let ids):
+            clipManager.deleteClips(ids: ids)
+        case .zoomClips(let ids):
+            clipManager.deleteZoomClips(ids: ids)
+        case .none:
+            break
+        }
+        selection = .none
     }
 
     private func regenerateKeyframes() {
