@@ -19,12 +19,14 @@
 		828D574913AF1F366C12AC97 /* MediaItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5699930F24F39749C068008B /* MediaItem.swift */; };
 		8C2E4E26B34618B829509BD3 /* PreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83BFDD4820105159572DDDF2 /* PreviewView.swift */; };
 		91243C424403D82D1E06679D /* ScreenRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F69960E6E04D9E306FFAA2EE /* ScreenRecorder.swift */; };
+		9594D7D022605A355685D8C6 /* ThumbnailCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E148B2D6FB901213ED5167C /* ThumbnailCache.swift */; };
 		95A1D70CCE2E00DF23DF9E4A /* MediaPoolPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBCAC7FF775703A9576D982D /* MediaPoolPanel.swift */; };
 		A20271BE43F4995466AAD8CA /* DemoReelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 941792B02818CA58D3858944 /* DemoReelApp.swift */; };
 		A606CE975A83A084DC82700C /* SourcePickerCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA608C1F70A79110F6A30C84 /* SourcePickerCoordinator.swift */; };
 		ABF2A319981160F36200A66B /* ClipManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB545DB725C10AF883F5E9E1 /* ClipManager.swift */; };
 		AE02B204778F19BDD4E19FE3 /* ZoomClip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2585DEB05CFE0432B1357304 /* ZoomClip.swift */; };
 		AF196859F30BBE74890B81FA /* ExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA51FEBAA10F1CFD4F7EE383 /* ExportSheet.swift */; };
+		B7E6C3EEEFA3008DF1945990 /* SnapEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D16EB765B24DE5918436B00 /* SnapEngine.swift */; };
 		BCC7FAE64F65FB28C08D4EFC /* CursorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFF32E808D120C70E6836921 /* CursorPanel.swift */; };
 		BD086B8F5F43B942C9F8AF37 /* NativeExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C84D3B18A42315F55912D3F /* NativeExporter.swift */; };
 		D2F303A030DA9CD202BA8FD3 /* RecordingOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD882DCDFC67858E4608DD7A /* RecordingOverlayView.swift */; };
@@ -41,6 +43,7 @@
 		01747FBD9CFEE5094403BA58 /* Clip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clip.swift; sourceTree = "<group>"; };
 		2585DEB05CFE0432B1357304 /* ZoomClip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomClip.swift; sourceTree = "<group>"; };
 		383C3C1138528350C6D6BFB5 /* DemoReelCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoReelCore.swift; sourceTree = "<group>"; };
+		4E148B2D6FB901213ED5167C /* ThumbnailCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailCache.swift; sourceTree = "<group>"; };
 		51BBB5A3B9889964A65088F2 /* WallpaperCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperCatalog.swift; sourceTree = "<group>"; };
 		52FFCD369CF642189E5DB0B6 /* DemoReel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DemoReel.entitlements; sourceTree = "<group>"; };
 		55DAF5A6D283689F246667A6 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -56,6 +59,7 @@
 		8442CAC3A00230FBB89FD7BA /* ExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManager.swift; sourceTree = "<group>"; };
 		8A6FA81971BB9558E8413156 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		8B099A312D613654F6D3B084 /* ZoomKeyframeEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomKeyframeEditor.swift; sourceTree = "<group>"; };
+		8D16EB765B24DE5918436B00 /* SnapEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapEngine.swift; sourceTree = "<group>"; };
 		941792B02818CA58D3858944 /* DemoReelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoReelApp.swift; sourceTree = "<group>"; };
 		9F3CB6CC10C3A51D56C347A8 /* StylePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StylePanel.swift; sourceTree = "<group>"; };
 		AB545DB725C10AF883F5E9E1 /* ClipManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipManager.swift; sourceTree = "<group>"; };
@@ -158,7 +162,9 @@
 				5699930F24F39749C068008B /* MediaItem.swift */,
 				DBCAC7FF775703A9576D982D /* MediaPoolPanel.swift */,
 				83BFDD4820105159572DDDF2 /* PreviewView.swift */,
+				8D16EB765B24DE5918436B00 /* SnapEngine.swift */,
 				9F3CB6CC10C3A51D56C347A8 /* StylePanel.swift */,
+				4E148B2D6FB901213ED5167C /* ThumbnailCache.swift */,
 				FBDA14E0A7DCFE079EC0B578 /* TimelineView.swift */,
 				51BBB5A3B9889964A65088F2 /* WallpaperCatalog.swift */,
 				2585DEB05CFE0432B1357304 /* ZoomClip.swift */,
@@ -255,8 +261,10 @@
 				D2F303A030DA9CD202BA8FD3 /* RecordingOverlayView.swift in Sources */,
 				E817796F5990E187809B30FE /* RecordingView.swift in Sources */,
 				91243C424403D82D1E06679D /* ScreenRecorder.swift in Sources */,
+				B7E6C3EEEFA3008DF1945990 /* SnapEngine.swift in Sources */,
 				A606CE975A83A084DC82700C /* SourcePickerCoordinator.swift in Sources */,
 				0E46E4A5754CA633614D65AC /* StylePanel.swift in Sources */,
+				9594D7D022605A355685D8C6 /* ThumbnailCache.swift in Sources */,
 				4B3EABA594A5ACFC941CE540 /* TimelineView.swift in Sources */,
 				E1275944A530EF18139A9A6C /* WallpaperCatalog.swift in Sources */,
 				AE02B204778F19BDD4E19FE3 /* ZoomClip.swift in Sources */,
