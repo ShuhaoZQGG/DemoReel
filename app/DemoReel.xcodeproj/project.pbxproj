@@ -7,116 +7,66 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0156D7862331565FB0C02249 /* color-burst-1.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 893CF65D4FBCBB952397D36C /* color-burst-1.jpg */; };
 		01F55BBB9F0681262F782674 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 78391F2AD0F0EEF05F0EE654 /* Assets.xcassets */; };
 		060B78CF2DB3A23BB8BF872E /* ZoomKeyframeEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B099A312D613654F6D3B084 /* ZoomKeyframeEditor.swift */; };
 		0E46E4A5754CA633614D65AC /* StylePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F3CB6CC10C3A51D56C347A8 /* StylePanel.swift */; };
 		13AA182F674961576DCB7C76 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55DAF5A6D283689F246667A6 /* ContentView.swift */; };
-		19605C48D16842DD6B4D6EA2 /* ventura-dark.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 85D045E02AAEF5F133558DDC /* ventura-dark.jpg */; };
-		1C398AFDA3B057DF2409D845 /* tahoe-light.jpg in Resources */ = {isa = PBXBuildFile; fileRef = C6BF238FF32677F9BD1F27F5 /* tahoe-light.jpg */; };
 		1E15CF88DB49D5A9618D3BA0 /* RecordingOverlayPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F4978D5C5F66FE363001369 /* RecordingOverlayPanel.swift */; };
 		2D326BB549F715A9C5A968D2 /* Clip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01747FBD9CFEE5094403BA58 /* Clip.swift */; };
-		2EA68D713F0B996ADF20711D /* sequoia-dark.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 40A10376062E28FF058FD486 /* sequoia-dark.jpg */; };
-		337F4CD1211CA10613AFF04C /* big-sur-day.jpg in Resources */ = {isa = PBXBuildFile; fileRef = D4B82431A089CEDCC72E3E25 /* big-sur-day.jpg */; };
-		407883BE8C36989ED326DEE7 /* monterey-dark.jpg in Resources */ = {isa = PBXBuildFile; fileRef = DCE8B7F40BCD3E2E606937C7 /* monterey-dark.jpg */; };
-		429BDA44A7C44F41392F6E9D /* sonoma-light.jpg in Resources */ = {isa = PBXBuildFile; fileRef = E1C6645E59D9D442376CBFDE /* sonoma-light.jpg */; };
-		4A0F4D86B3DDD316E9C6BC81 /* abstract-1.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 2BC81ED42999C695623DDD9C /* abstract-1.jpg */; };
 		4B3EABA594A5ACFC941CE540 /* TimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBDA14E0A7DCFE079EC0B578 /* TimelineView.swift */; };
 		4C60F7A6BDA81B7C213E7817 /* CLAUDE.md in Resources */ = {isa = PBXBuildFile; fileRef = 48902C5F8DD788D01DCAB870 /* CLAUDE.md */; };
-		4CB464592C7A9E10F558E610 /* color-burst-2.jpg in Resources */ = {isa = PBXBuildFile; fileRef = E38EFF293483FA2F413C910D /* color-burst-2.jpg */; };
 		5AC8A877F4147EA140183D80 /* AudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF37F4D0A360A3FBE2EC2165 /* AudioCapture.swift */; };
 		60BE27B07798ABFD43A504A6 /* EventLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77821EA51A6E7D9FD1B2AAD9 /* EventLogger.swift */; };
-		839439C84CF69172F4CBB450 /* abstract-2.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 27A767F6F8416E0CC08578F4 /* abstract-2.jpg */; };
-		83A251B84CF6AFF6B0A7D65A /* sonoma-dark.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 24764B1C4CEA7D7FE3539DAC /* sonoma-dark.jpg */; };
-		8AA03825F39AB6626B687B25 /* chroma-2.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 5B7AEF653415A5D0873C5674 /* chroma-2.jpg */; };
 		8C2E4E26B34618B829509BD3 /* PreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83BFDD4820105159572DDDF2 /* PreviewView.swift */; };
 		91243C424403D82D1E06679D /* ScreenRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F69960E6E04D9E306FFAA2EE /* ScreenRecorder.swift */; };
 		955B7CAF6CCC413D897106CF /* CLAUDE.md in Resources */ = {isa = PBXBuildFile; fileRef = DD0A28B9017556578AF79497 /* CLAUDE.md */; };
 		97397EB319D8487CEFB1CEF6 /* CLAUDE.md in Resources */ = {isa = PBXBuildFile; fileRef = 3D895CBF7C1243E7E1EE620A /* CLAUDE.md */; };
 		9823F930E964D104901BDD74 /* CLAUDE.md in Resources */ = {isa = PBXBuildFile; fileRef = 895BE0AA970835AB55863755 /* CLAUDE.md */; };
-		9FA1C85CA7F453157276B1B5 /* sequoia-light.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 5CB874F23F3290D893DC7E52 /* sequoia-light.jpg */; };
 		A20271BE43F4995466AAD8CA /* DemoReelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 941792B02818CA58D3858944 /* DemoReelApp.swift */; };
-		A2F17BB18D05740054C3BB34 /* chroma-1.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 7EB07AF854431DDC62D82290 /* chroma-1.jpg */; };
 		A606CE975A83A084DC82700C /* SourcePickerCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA608C1F70A79110F6A30C84 /* SourcePickerCoordinator.swift */; };
 		ABF2A319981160F36200A66B /* ClipManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB545DB725C10AF883F5E9E1 /* ClipManager.swift */; };
-		AD364CFB70B32E775F68A9DC /* ventura-light.jpg in Resources */ = {isa = PBXBuildFile; fileRef = D8DD60447182E8724B3C93E5 /* ventura-light.jpg */; };
 		AE02B204778F19BDD4E19FE3 /* ZoomClip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2585DEB05CFE0432B1357304 /* ZoomClip.swift */; };
-		AF0AB4669E95C069C3F27C2B /* abstract-shapes-2.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 591B7C251CA21ED609B500AF /* abstract-shapes-2.jpg */; };
 		AF196859F30BBE74890B81FA /* ExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA51FEBAA10F1CFD4F7EE383 /* ExportSheet.swift */; };
-		B865266561E021C9987C986A /* abstract-3.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 2DFF90C50502B1C6A0EB710E /* abstract-3.jpg */; };
 		BCC7FAE64F65FB28C08D4EFC /* CursorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFF32E808D120C70E6836921 /* CursorPanel.swift */; };
 		BD086B8F5F43B942C9F8AF37 /* NativeExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C84D3B18A42315F55912D3F /* NativeExporter.swift */; };
 		D2F303A030DA9CD202BA8FD3 /* RecordingOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD882DCDFC67858E4608DD7A /* RecordingOverlayView.swift */; };
-		D916D0CE987E7ED0C388CE39 /* color-burst-3.jpg in Resources */ = {isa = PBXBuildFile; fileRef = AC7CCE5C9DF2B13D85BCAA77 /* color-burst-3.jpg */; };
 		D93ADDEE215DB289C7C365B3 /* KeyboardShortcutMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68FCC1BD7D911A52BA902AD6 /* KeyboardShortcutMonitor.swift */; };
-		DBBF3C7DB81FAAB4EC0A7B69 /* sonoma-horizon.jpg in Resources */ = {isa = PBXBuildFile; fileRef = B8BB07F6BDF6D5249A6B1A09 /* sonoma-horizon.jpg */; };
 		E1275944A530EF18139A9A6C /* WallpaperCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51BBB5A3B9889964A65088F2 /* WallpaperCatalog.swift */; };
-		E401266A234CECA3354B9556 /* big-sur-night.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 7949F4C05D282579EEA96145 /* big-sur-night.jpg */; };
 		E52D59E0E94E2B6254657C44 /* DemoReelCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383C3C1138528350C6D6BFB5 /* DemoReelCore.swift */; };
-		E7F4FC9E407241CEA8F81731 /* tahoe-dark.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 632EBBBCFBA63D2D090CBF36 /* tahoe-dark.jpg */; };
 		E817796F5990E187809B30FE /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A8D8861618509BE87E0D3A /* RecordingView.swift */; };
-		E956F604C9830301A7FE1B1E /* monterey-light.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 302D664DB1CF3EA4ABE2EB72 /* monterey-light.jpg */; };
-		EC90C4B2E6E363EA16027A99 /* abstract-shapes.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 6451F3EFEAF3DAB994A08167 /* abstract-shapes.jpg */; };
 		EF0DF68D31E8CF2D53F09D5E /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A6FA81971BB9558E8413156 /* EditorView.swift */; };
 		F1D1A3D267F35F65D8D6A79C /* ExportManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8442CAC3A00230FBB89FD7BA /* ExportManager.swift */; };
 		F3690633F7F63BDACCBBD27A /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68F935ED02583659A6E20DA3 /* AppState.swift */; };
-		F69A5AE30B99A4012B9C4DA1 /* abstract-4.jpg in Resources */ = {isa = PBXBuildFile; fileRef = A59F8BC110D2879B84CDE2D7 /* abstract-4.jpg */; };
-		F8696A33DCC09322950979AE /* sequoia-sunrise.jpg in Resources */ = {isa = PBXBuildFile; fileRef = BB08C43713332CA268DC5C9E /* sequoia-sunrise.jpg */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		01747FBD9CFEE5094403BA58 /* Clip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clip.swift; sourceTree = "<group>"; };
-		24764B1C4CEA7D7FE3539DAC /* sonoma-dark.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "sonoma-dark.jpg"; sourceTree = "<group>"; };
 		2585DEB05CFE0432B1357304 /* ZoomClip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomClip.swift; sourceTree = "<group>"; };
-		27A767F6F8416E0CC08578F4 /* abstract-2.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "abstract-2.jpg"; sourceTree = "<group>"; };
-		2BC81ED42999C695623DDD9C /* abstract-1.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "abstract-1.jpg"; sourceTree = "<group>"; };
-		2DFF90C50502B1C6A0EB710E /* abstract-3.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "abstract-3.jpg"; sourceTree = "<group>"; };
-		302D664DB1CF3EA4ABE2EB72 /* monterey-light.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "monterey-light.jpg"; sourceTree = "<group>"; };
 		383C3C1138528350C6D6BFB5 /* DemoReelCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoReelCore.swift; sourceTree = "<group>"; };
 		3D895CBF7C1243E7E1EE620A /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
-		40A10376062E28FF058FD486 /* sequoia-dark.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "sequoia-dark.jpg"; sourceTree = "<group>"; };
 		48902C5F8DD788D01DCAB870 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
 		51BBB5A3B9889964A65088F2 /* WallpaperCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperCatalog.swift; sourceTree = "<group>"; };
 		52FFCD369CF642189E5DB0B6 /* DemoReel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DemoReel.entitlements; sourceTree = "<group>"; };
 		55DAF5A6D283689F246667A6 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		591B7C251CA21ED609B500AF /* abstract-shapes-2.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "abstract-shapes-2.jpg"; sourceTree = "<group>"; };
-		5B7AEF653415A5D0873C5674 /* chroma-2.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "chroma-2.jpg"; sourceTree = "<group>"; };
 		5C84D3B18A42315F55912D3F /* NativeExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeExporter.swift; sourceTree = "<group>"; };
-		5CB874F23F3290D893DC7E52 /* sequoia-light.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "sequoia-light.jpg"; sourceTree = "<group>"; };
-		632EBBBCFBA63D2D090CBF36 /* tahoe-dark.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "tahoe-dark.jpg"; sourceTree = "<group>"; };
-		6451F3EFEAF3DAB994A08167 /* abstract-shapes.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "abstract-shapes.jpg"; sourceTree = "<group>"; };
 		68F935ED02583659A6E20DA3 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		68FCC1BD7D911A52BA902AD6 /* KeyboardShortcutMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutMonitor.swift; sourceTree = "<group>"; };
 		75A8D8861618509BE87E0D3A /* RecordingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingView.swift; sourceTree = "<group>"; };
 		77821EA51A6E7D9FD1B2AAD9 /* EventLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventLogger.swift; sourceTree = "<group>"; };
 		78391F2AD0F0EEF05F0EE654 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		7949F4C05D282579EEA96145 /* big-sur-night.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "big-sur-night.jpg"; sourceTree = "<group>"; };
-		7EB07AF854431DDC62D82290 /* chroma-1.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "chroma-1.jpg"; sourceTree = "<group>"; };
 		7F4978D5C5F66FE363001369 /* RecordingOverlayPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlayPanel.swift; sourceTree = "<group>"; };
 		83BFDD4820105159572DDDF2 /* PreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewView.swift; sourceTree = "<group>"; };
 		8442CAC3A00230FBB89FD7BA /* ExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManager.swift; sourceTree = "<group>"; };
-		85D045E02AAEF5F133558DDC /* ventura-dark.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "ventura-dark.jpg"; sourceTree = "<group>"; };
-		893CF65D4FBCBB952397D36C /* color-burst-1.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "color-burst-1.jpg"; sourceTree = "<group>"; };
 		895BE0AA970835AB55863755 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
 		8A6FA81971BB9558E8413156 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		8B099A312D613654F6D3B084 /* ZoomKeyframeEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomKeyframeEditor.swift; sourceTree = "<group>"; };
 		941792B02818CA58D3858944 /* DemoReelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoReelApp.swift; sourceTree = "<group>"; };
 		9F3CB6CC10C3A51D56C347A8 /* StylePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StylePanel.swift; sourceTree = "<group>"; };
-		A59F8BC110D2879B84CDE2D7 /* abstract-4.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "abstract-4.jpg"; sourceTree = "<group>"; };
 		AB545DB725C10AF883F5E9E1 /* ClipManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipManager.swift; sourceTree = "<group>"; };
-		AC7CCE5C9DF2B13D85BCAA77 /* color-burst-3.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "color-burst-3.jpg"; sourceTree = "<group>"; };
 		AFF32E808D120C70E6836921 /* CursorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorPanel.swift; sourceTree = "<group>"; };
-		B8BB07F6BDF6D5249A6B1A09 /* sonoma-horizon.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "sonoma-horizon.jpg"; sourceTree = "<group>"; };
-		BB08C43713332CA268DC5C9E /* sequoia-sunrise.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "sequoia-sunrise.jpg"; sourceTree = "<group>"; };
-		C6BF238FF32677F9BD1F27F5 /* tahoe-light.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "tahoe-light.jpg"; sourceTree = "<group>"; };
 		C95367E29E4DE15A47052C44 /* .gitkeep */ = {isa = PBXFileReference; path = .gitkeep; sourceTree = "<group>"; };
-		D4B82431A089CEDCC72E3E25 /* big-sur-day.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "big-sur-day.jpg"; sourceTree = "<group>"; };
-		D8DD60447182E8724B3C93E5 /* ventura-light.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "ventura-light.jpg"; sourceTree = "<group>"; };
-		DCE8B7F40BCD3E2E606937C7 /* monterey-dark.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "monterey-dark.jpg"; sourceTree = "<group>"; };
 		DD0A28B9017556578AF79497 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
-		E1C6645E59D9D442376CBFDE /* sonoma-light.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "sonoma-light.jpg"; sourceTree = "<group>"; };
 		E2587285B31D89BA43E751F0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		E38EFF293483FA2F413C910D /* color-burst-2.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "color-burst-2.jpg"; sourceTree = "<group>"; };
 		EA608C1F70A79110F6A30C84 /* SourcePickerCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcePickerCoordinator.swift; sourceTree = "<group>"; };
 		EB4592E704E57E253A488342 /* DemoReel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DemoReel.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F69960E6E04D9E306FFAA2EE /* ScreenRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenRecorder.swift; sourceTree = "<group>"; };
@@ -127,46 +77,6 @@
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
-		01228802FC04D3B42DA421DD /* Wallpapers */ = {
-			isa = PBXGroup;
-			children = (
-				2BC81ED42999C695623DDD9C /* abstract-1.jpg */,
-				27A767F6F8416E0CC08578F4 /* abstract-2.jpg */,
-				2DFF90C50502B1C6A0EB710E /* abstract-3.jpg */,
-				A59F8BC110D2879B84CDE2D7 /* abstract-4.jpg */,
-				591B7C251CA21ED609B500AF /* abstract-shapes-2.jpg */,
-				6451F3EFEAF3DAB994A08167 /* abstract-shapes.jpg */,
-				D4B82431A089CEDCC72E3E25 /* big-sur-day.jpg */,
-				7949F4C05D282579EEA96145 /* big-sur-night.jpg */,
-				7EB07AF854431DDC62D82290 /* chroma-1.jpg */,
-				5B7AEF653415A5D0873C5674 /* chroma-2.jpg */,
-				893CF65D4FBCBB952397D36C /* color-burst-1.jpg */,
-				E38EFF293483FA2F413C910D /* color-burst-2.jpg */,
-				AC7CCE5C9DF2B13D85BCAA77 /* color-burst-3.jpg */,
-				DCE8B7F40BCD3E2E606937C7 /* monterey-dark.jpg */,
-				302D664DB1CF3EA4ABE2EB72 /* monterey-light.jpg */,
-				40A10376062E28FF058FD486 /* sequoia-dark.jpg */,
-				5CB874F23F3290D893DC7E52 /* sequoia-light.jpg */,
-				BB08C43713332CA268DC5C9E /* sequoia-sunrise.jpg */,
-				24764B1C4CEA7D7FE3539DAC /* sonoma-dark.jpg */,
-				B8BB07F6BDF6D5249A6B1A09 /* sonoma-horizon.jpg */,
-				E1C6645E59D9D442376CBFDE /* sonoma-light.jpg */,
-				632EBBBCFBA63D2D090CBF36 /* tahoe-dark.jpg */,
-				C6BF238FF32677F9BD1F27F5 /* tahoe-light.jpg */,
-				85D045E02AAEF5F133558DDC /* ventura-dark.jpg */,
-				D8DD60447182E8724B3C93E5 /* ventura-light.jpg */,
-			);
-			path = Wallpapers;
-			sourceTree = "<group>";
-		};
-		114598826AEF5FC0D00C0ED0 /* Resources */ = {
-			isa = PBXGroup;
-			children = (
-				01228802FC04D3B42DA421DD /* Wallpapers */,
-			);
-			path = Resources;
-			sourceTree = "<group>";
-		};
 		2B4E72011F71FC651E178829 = {
 			isa = PBXGroup;
 			children = (
@@ -187,7 +97,6 @@
 				E320BD03EF94627F2A81C0BD /* Export */,
 				A3B02AB70877572C6DF8540D /* Generated */,
 				9106E27BAD6F4F6056E9442F /* Recording */,
-				114598826AEF5FC0D00C0ED0 /* Resources */,
 				BF7A45E88A90116C2AACBC79 /* Shared */,
 			);
 			path = DemoReel;
@@ -325,31 +234,6 @@
 				955B7CAF6CCC413D897106CF /* CLAUDE.md in Resources */,
 				4C60F7A6BDA81B7C213E7817 /* CLAUDE.md in Resources */,
 				97397EB319D8487CEFB1CEF6 /* CLAUDE.md in Resources */,
-				4A0F4D86B3DDD316E9C6BC81 /* abstract-1.jpg in Resources */,
-				839439C84CF69172F4CBB450 /* abstract-2.jpg in Resources */,
-				B865266561E021C9987C986A /* abstract-3.jpg in Resources */,
-				F69A5AE30B99A4012B9C4DA1 /* abstract-4.jpg in Resources */,
-				AF0AB4669E95C069C3F27C2B /* abstract-shapes-2.jpg in Resources */,
-				EC90C4B2E6E363EA16027A99 /* abstract-shapes.jpg in Resources */,
-				337F4CD1211CA10613AFF04C /* big-sur-day.jpg in Resources */,
-				E401266A234CECA3354B9556 /* big-sur-night.jpg in Resources */,
-				A2F17BB18D05740054C3BB34 /* chroma-1.jpg in Resources */,
-				8AA03825F39AB6626B687B25 /* chroma-2.jpg in Resources */,
-				0156D7862331565FB0C02249 /* color-burst-1.jpg in Resources */,
-				4CB464592C7A9E10F558E610 /* color-burst-2.jpg in Resources */,
-				D916D0CE987E7ED0C388CE39 /* color-burst-3.jpg in Resources */,
-				407883BE8C36989ED326DEE7 /* monterey-dark.jpg in Resources */,
-				E956F604C9830301A7FE1B1E /* monterey-light.jpg in Resources */,
-				2EA68D713F0B996ADF20711D /* sequoia-dark.jpg in Resources */,
-				9FA1C85CA7F453157276B1B5 /* sequoia-light.jpg in Resources */,
-				F8696A33DCC09322950979AE /* sequoia-sunrise.jpg in Resources */,
-				83A251B84CF6AFF6B0A7D65A /* sonoma-dark.jpg in Resources */,
-				DBBF3C7DB81FAAB4EC0A7B69 /* sonoma-horizon.jpg in Resources */,
-				429BDA44A7C44F41392F6E9D /* sonoma-light.jpg in Resources */,
-				E7F4FC9E407241CEA8F81731 /* tahoe-dark.jpg in Resources */,
-				1C398AFDA3B057DF2409D845 /* tahoe-light.jpg in Resources */,
-				19605C48D16842DD6B4D6EA2 /* ventura-dark.jpg in Resources */,
-				AD364CFB70B32E775F68A9DC /* ventura-light.jpg in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
