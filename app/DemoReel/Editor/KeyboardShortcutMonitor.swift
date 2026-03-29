@@ -22,6 +22,8 @@ final class KeyboardShortcutMonitor {
         case addZoom
         case deleteSelection
         case deactivateScissor
+        case undo
+        case redo
     }
 
     private var monitor: Any?
@@ -46,8 +48,22 @@ final class KeyboardShortcutMonitor {
                 return event
             }
 
-            // Only handle bare keystrokes — ignore Cmd, Option, Control, Shift
+            // Handle undo/redo shortcuts before bare-key guard
+            // Undo: Cmd+Z, Cmd+Shift+Z
+            // Redo: Cmd+Y, Cmd+Shift+Y
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if let chars = event.charactersIgnoringModifiers {
+                if chars == "z" && (flags == .command || flags == [.command, .shift]) {
+                    self.lastAction = ActionEvent(action: .undo)
+                    return nil
+                }
+                if chars == "y" && (flags == .command || flags == [.command, .shift]) {
+                    self.lastAction = ActionEvent(action: .redo)
+                    return nil
+                }
+            }
+
+            // Only handle bare keystrokes — ignore Cmd, Option, Control, Shift
             guard flags.isEmpty || flags == .function else { return event }
 
             // Check keyCode actions first (for special keys like Delete, Escape)

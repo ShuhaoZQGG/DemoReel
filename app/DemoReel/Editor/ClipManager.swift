@@ -1,10 +1,124 @@
 import Foundation
+import AVFoundation
 
 /// Manages an ordered list of clips and provides time mapping
 /// between source video time and the visual/output timeline.
 @Observable
 final class ClipManager {
     var clips: [Clip] = []
+
+    // MARK: - Undo / Redo
+
+    private struct Snapshot {
+        let clips: [Clip]
+        let zoomClips: [ZoomClip]
+    }
+
+    private static let maxUndoSteps = 50
+
+    private var undoStack: [Snapshot] = []
+    private var redoStack: [Snapshot] = []
+    /// Timestamp of last undo snapshot — used to debounce slider edits.
+    private var lastSnapshotDate: Date = .distantPast
+
+    var canUndo: Bool { !undoStack.isEmpty }
+    var canRedo: Bool { !redoStack.isEmpty }
+
+    /// Save current state before a mutation. Clears the redo stack.
+    func saveUndoState() {
+        undoStack.append(Snapshot(clips: clips, zoomClips: zoomClips))
+        if undoStack.count > Self.maxUndoSteps {
+            undoStack.removeFirst(undoStack.count - Self.maxUndoSteps)
+        }
+        redoStack.removeAll()
+        lastSnapshotDate = Date()
+    }
+
+    /// Save undo state only if >500 ms since the last save (for continuous slider edits).
+    func saveUndoStateDebounced() {
+        guard Date().timeIntervalSince(lastSnapshotDate) > 0.5 else { return }
+        saveUndoState()
+    }
+
+    func undo() {
+        guard let snapshot = undoStack.popLast() else { return }
+        redoStack.append(Snapshot(clips: clips, zoomClips: zoomClips))
+        clips = snapshot.clips
+        zoomClips = snapshot.zoomClips
+    }
+
+    func redo() {
+        guard let snapshot = redoStack.popLast() else { return }
+        undoStack.append(Snapshot(clips: clips, zoomClips: zoomClips))
+        clips = snapshot.clips
+        zoomClips = snapshot.zoomClips
+    }
+
+    // MARK: - Media Pool
+
+    var mediaItems: [MediaItem] = []
+
+    /// Import a video file into the media pool. Returns the new MediaItem.
+    @discardableResult
+    func addMediaItem(url: URL) async throws -> MediaItem {
+        let asset = AVURLAsset(url: url)
+        let duration = try await asset.load(.duration)
+        let durationMs = UInt64(max(0, CMTimeGetSeconds(duration)) * 1000)
+
+        var width: Double = 1920
+        var height: Double = 1080
+        if let track = try await asset.loadTracks(withMediaType: .video).first {
+            let size = try await track.load(.naturalSize)
+            width = Double(size.width)
+            height = Double(size.height)
+        }
+
+        let name = url.deletingPathExtension().lastPathComponent
+        let item = MediaItem(filePath: url.path, durationMs: durationMs, width: width, height: height, name: name)
+        await MainActor.run {
+            mediaItems.append(item)
+        }
+        return item
+    }
+
+    /// Add a clip from a media pool item at the end of the timeline.
+    func addClipFromMedia(_ mediaItem: MediaItem) {
+        saveUndoState()
+        let startMs = timelineEndMs
+        let clip = Clip(
+            sourceStartMs: 0,
+            sourceEndMs: mediaItem.durationMs,
+            timelineStartMs: startMs,
+            mediaItemId: mediaItem.id
+        )
+        clips.append(clip)
+    }
+
+    /// Add a clip from a media pool item at a specific timeline position.
+    func addClipFromMedia(_ mediaItem: MediaItem, atTimelineMs: UInt64) {
+        saveUndoState()
+        let clip = Clip(
+            sourceStartMs: 0,
+            sourceEndMs: mediaItem.durationMs,
+            timelineStartMs: atTimelineMs,
+            mediaItemId: mediaItem.id
+        )
+        clips.append(clip)
+    }
+
+    /// Look up the media item for a clip (nil for legacy single-source clips).
+    func mediaItem(for clip: Clip) -> MediaItem? {
+        guard let id = clip.mediaItemId else { return nil }
+        return mediaItems.first { $0.id == id }
+    }
+
+    /// Get the video file URL for a clip, falling back to a legacy URL if needed.
+    func videoURL(for clip: Clip, legacyURL: URL?) -> URL? {
+        if let item = mediaItem(for: clip) {
+            return item.fileURL
+        }
+        return legacyURL
+    }
 
     /// The end of the last clip on the timeline (ms).
     var timelineEndMs: UInt64 {
@@ -24,6 +138,7 @@ final class ClipManager {
     /// Create the initial single clip spanning the given range.
     func initializeFromTrim(startMs: UInt64, endMs: UInt64) {
         guard endMs > startMs else { return }
+        saveUndoState()
         clips = [Clip(sourceStartMs: startMs, sourceEndMs: endMs, timelineStartMs: 0)]
     }
 
@@ -31,19 +146,22 @@ final class ClipManager {
     /// The split clip's timeline position is used: left keeps it, right starts right after left.
     func split(atSourceTimeMs ms: UInt64) {
         guard let index = clips.firstIndex(where: { $0.sourceStartMs < ms && $0.sourceEndMs > ms }) else { return }
+        saveUndoState()
         let clip = clips[index]
         let leftDurationMs = ms - clip.sourceStartMs
         let left = Clip(
             sourceStartMs: clip.sourceStartMs,
             sourceEndMs: ms,
             speed: clip.speed,
-            timelineStartMs: clip.timelineStartMs
+            timelineStartMs: clip.timelineStartMs,
+            mediaItemId: clip.mediaItemId
         )
         let right = Clip(
             sourceStartMs: ms,
             sourceEndMs: clip.sourceEndMs,
             speed: clip.speed,
-            timelineStartMs: clip.timelineStartMs + leftDurationMs
+            timelineStartMs: clip.timelineStartMs + leftDurationMs,
+            mediaItemId: clip.mediaItemId
         )
         clips.replaceSubrange(index...index, with: [left, right])
     }
@@ -52,13 +170,15 @@ final class ClipManager {
     /// The merged clip uses the left clip's timeline position.
     func merge(clipIndex: Int) {
         guard clipIndex >= 0, clipIndex + 1 < clips.count else { return }
+        saveUndoState()
         let left = clips[clipIndex]
         let right = clips[clipIndex + 1]
         let merged = Clip(
             sourceStartMs: left.sourceStartMs,
             sourceEndMs: right.sourceEndMs,
             speed: left.speed,
-            timelineStartMs: left.timelineStartMs
+            timelineStartMs: left.timelineStartMs,
+            mediaItemId: left.mediaItemId
         )
         clips.replaceSubrange(clipIndex...clipIndex + 1, with: [merged])
     }
@@ -66,6 +186,7 @@ final class ClipManager {
     /// Move a clip to a new timeline position (ms). Prevents overlap by snapping.
     func moveOnTimeline(clipId: UUID, toTimelineMs newStart: UInt64) {
         guard let index = clips.firstIndex(where: { $0.id == clipId }) else { return }
+        saveUndoState()
         let clip = clips[index]
         let duration = clip.timelineEndMs - clip.timelineStartMs
 
@@ -91,11 +212,13 @@ final class ClipManager {
 
     /// Delete video clips by their IDs.
     func deleteClips(ids: Set<UUID>) {
+        saveUndoState()
         clips.removeAll { ids.contains($0.id) }
     }
 
     /// Delete zoom clips by their IDs.
     func deleteZoomClips(ids: Set<UUID>) {
+        saveUndoState()
         zoomClips.removeAll { ids.contains($0.id) }
     }
 
@@ -106,12 +229,12 @@ final class ClipManager {
 
     /// Find the source time for a given timeline position (seconds).
     /// Returns nil if the position is in a gap (no clip).
-    func sourceTimeForTimelinePosition(_ seconds: Double) -> (sourceTimeMs: UInt64, clipIndex: Int)? {
+    func sourceTimeForTimelinePosition(_ seconds: Double) -> (sourceTimeMs: UInt64, clipIndex: Int, mediaItemId: UUID?)? {
         let posMs = UInt64(seconds * 1000)
         for (i, clip) in clipsByTimelineOrder.enumerated() {
             if posMs >= clip.timelineStartMs && posMs < clip.timelineEndMs {
                 let offsetMs = posMs - clip.timelineStartMs
-                return (clip.sourceStartMs + offsetMs, i)
+                return (clip.sourceStartMs + offsetMs, i, clip.mediaItemId)
             }
         }
         return nil
@@ -130,6 +253,7 @@ final class ClipManager {
 
     /// Add a new zoom clip at the given timeline position. Overlapping clips are allowed.
     func addZoomClip(atTimelineMs ms: UInt64, durationMs: UInt64 = 1000, centerX: Double = 0.5, centerY: Double = 0.5, scale: Double = 2.0) {
+        saveUndoState()
         zoomClips.append(ZoomClip(
             timelineStartMs: ms, durationMs: durationMs,
             centerX: centerX, centerY: centerY, scale: scale
@@ -165,6 +289,7 @@ final class ClipManager {
     /// Split a zoom clip at the given timeline position.
     func splitZoomClip(atTimelineMs ms: UInt64) {
         guard let index = zoomClips.firstIndex(where: { ms > $0.timelineStartMs && ms < $0.timelineEndMs }) else { return }
+        saveUndoState()
         let zc = zoomClips[index]
         let leftDuration = ms - zc.timelineStartMs
         let rightDuration = zc.durationMs - leftDuration
@@ -183,6 +308,7 @@ final class ClipManager {
     /// Merge two adjacent zoom clips.
     func mergeZoomClips(leftIndex: Int) {
         guard leftIndex >= 0, leftIndex + 1 < zoomClips.count else { return }
+        saveUndoState()
         let left = zoomClips[leftIndex]
         let right = zoomClips[leftIndex + 1]
         let merged = ZoomClip(
@@ -196,6 +322,7 @@ final class ClipManager {
     /// Move a zoom clip to a new timeline position. Prevents overlap.
     func moveZoomClipOnTimeline(clipId: UUID, toTimelineMs newStart: UInt64) {
         guard let index = zoomClips.firstIndex(where: { $0.id == clipId }) else { return }
+        saveUndoState()
         let zc = zoomClips[index]
 
         var proposed = newStart
@@ -238,22 +365,20 @@ final class ClipManager {
                 centerX: zc.centerX, centerY: zc.centerY, scale: zc.scale
             )]
 
-            if zc.easeEnabled {
-                let holdMs = zc.durationMs > (zc.easeInMs + zc.easeOutMs)
-                    ? zc.durationMs - zc.easeInMs - zc.easeOutMs
-                    : 0
-                let perClipConfig = ZoomConfig(
-                    scale: zc.scale,
-                    easeInMs: zc.easeInMs,
-                    holdMs: holdMs,
-                    easeOutMs: zc.easeOutMs,
-                    mergeThresholdMs: globalConfig.mergeThresholdMs,
-                    enabled: true
-                )
-                return zoomScaleAt(keyframes: kf, timestampMs: timestampMs, config: perClipConfig)
-            } else {
-                return zoomScaleAt(keyframes: kf, timestampMs: timestampMs, config: globalConfig)
-            }
+            // Always derive hold from clip duration — global holdMs is only for auto-generation
+            let easeIn = zc.easeEnabled ? zc.easeInMs : globalConfig.easeInMs
+            let easeOut = zc.easeEnabled ? zc.easeOutMs : globalConfig.easeOutMs
+            let holdMs = zc.durationMs > (easeIn + easeOut)
+                ? zc.durationMs - easeIn - easeOut
+                : 0
+            let clipConfig = globalConfig.with(
+                scale: zc.scale,
+                easeInMs: easeIn,
+                holdMs: holdMs,
+                easeOutMs: easeOut,
+                enabled: true
+            )
+            return zoomScaleAt(keyframes: kf, timestampMs: timestampMs, config: clipConfig)
         }
         return 1.0
     }

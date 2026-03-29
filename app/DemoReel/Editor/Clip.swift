@@ -1,6 +1,6 @@
 import Foundation
 
-/// A segment of the source video with independent speed.
+/// A segment of a source video with independent speed.
 struct Clip: Identifiable, Codable {
     let id: UUID
     var sourceStartMs: UInt64
@@ -8,13 +8,16 @@ struct Clip: Identifiable, Codable {
     var speed: Double
     /// Position on the visual/output timeline (ms). Determines where the clip appears.
     var timelineStartMs: UInt64
+    /// Which media pool item this clip references. Nil for legacy single-source projects.
+    var mediaItemId: UUID?
 
-    init(id: UUID = UUID(), sourceStartMs: UInt64, sourceEndMs: UInt64, speed: Double = 1.0, timelineStartMs: UInt64 = 0) {
+    init(id: UUID = UUID(), sourceStartMs: UInt64, sourceEndMs: UInt64, speed: Double = 1.0, timelineStartMs: UInt64 = 0, mediaItemId: UUID? = nil) {
         self.id = id
         self.sourceStartMs = sourceStartMs
         self.sourceEndMs = sourceEndMs
         self.speed = speed
         self.timelineStartMs = timelineStartMs
+        self.mediaItemId = mediaItemId
     }
 
     /// Duration in the source video (seconds).
