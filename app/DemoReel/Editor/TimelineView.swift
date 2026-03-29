@@ -1,5 +1,35 @@
 import SwiftUI
 
+// MARK: - Tooltip Modifier
+
+/// Custom tooltip that appears on hover, more reliable than `.help()` which is
+/// disrupted by frequent SwiftUI view updates (e.g. 30 FPS playback timer).
+private struct TooltipModifier: ViewModifier {
+    let text: String
+    @State private var isHovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { hovering in
+                isHovering = hovering
+            }
+            .popover(isPresented: $isHovering, arrowEdge: .bottom) {
+                Text(text)
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .fixedSize()
+                    .interactiveDismissDisabled()
+            }
+    }
+}
+
+extension View {
+    func tooltip(_ text: String) -> some View {
+        modifier(TooltipModifier(text: text))
+    }
+}
+
 /// Which track the user is interacting with.
 enum TrackSelection: Equatable {
     case none
@@ -99,6 +129,7 @@ struct TimelineView: View {
                 Image(systemName: "backward.end.fill")
             }
             .buttonStyle(.plain)
+            .tooltip("Go to first frame")
 
             // Play / Pause
             Button(action: { isPlaying.toggle() }) {
@@ -106,6 +137,7 @@ struct TimelineView: View {
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.space, modifiers: [])
+            .tooltip(isPlaying ? "Pause (Space)" : "Play (Space)")
 
             // Go to last frame
             Button(action: {
@@ -115,6 +147,7 @@ struct TimelineView: View {
                 Image(systemName: "forward.end.fill")
             }
             .buttonStyle(.plain)
+            .tooltip("Go to last frame")
 
             Divider().frame(height: 16)
 
@@ -124,6 +157,7 @@ struct TimelineView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(scissorModeActive ? .blue : .primary)
+            .tooltip("Split mode (C)")
 
             Divider().frame(height: 16)
 
@@ -133,7 +167,7 @@ struct TimelineView: View {
             }
             .buttonStyle(.plain)
             .disabled(selection.count != 2)
-            .help("Snap selected clips together")
+            .tooltip("Snap selected clips together")
 
             // Merge: combine magnetted adjacent clips
             Button(action: mergeSelected) {
@@ -141,7 +175,7 @@ struct TimelineView: View {
             }
             .buttonStyle(.plain)
             .disabled(!canMerge)
-            .help("Merge magnetted clips")
+            .tooltip("Merge magnetted clips")
 
             // Delete selected clips
             Button(action: deleteSelected) {
@@ -149,7 +183,7 @@ struct TimelineView: View {
             }
             .buttonStyle(.plain)
             .disabled(selection == .none)
-            .help("Delete selected clips")
+            .tooltip("Delete selected clips")
 
             Divider().frame(height: 16)
 
@@ -162,7 +196,7 @@ struct TimelineView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(zoomPlacementActive ? .green : .primary)
-            .help("Place zoom clip on timeline (click to place)")
+            .tooltip("Add zoom clip (Z)")
 
             Divider().frame(height: 16)
 
@@ -182,6 +216,7 @@ struct TimelineView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
+                .tooltip("Zoom scale")
 
                 // Ease toggle for selected zoom clips
                 Button(action: {
@@ -195,7 +230,7 @@ struct TimelineView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(selectedZoomEaseEnabled ? .blue : .secondary)
-                .help("Toggle ease in/out regions")
+                .tooltip("Toggle ease in/out")
             } else {
                 // Video speed selector
                 Menu {
@@ -211,6 +246,7 @@ struct TimelineView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
+                .tooltip("Playback speed")
             }
 
             Divider().frame(height: 16)
@@ -246,6 +282,7 @@ struct TimelineView: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+            .tooltip("Timeline zoom")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -585,31 +622,46 @@ struct TimelineView: View {
         magnetedIds = ids
     }
 
+    /// IDs of the two clips eligible for merge — either explicitly magnetted or already adjacent when selected.
+    private var mergeableIds: Set<UUID> {
+        if magnetedIds.count == 2 { return magnetedIds }
+        // Also allow merge when 2 selected clips are already adjacent
+        switch selection {
+        case .videoClips(let ids) where ids.count == 2:
+            return ids
+        case .zoomClips(let ids) where ids.count == 2:
+            return ids
+        default:
+            return []
+        }
+    }
+
     private var canMerge: Bool {
-        guard magnetedIds.count == 2 else { return false }
+        let ids = mergeableIds
+        guard ids.count == 2 else { return false }
         switch selection {
         case .videoClips:
-            return canMergeVideoClips
+            return canMergeVideoClips(ids)
         case .zoomClips:
-            return canMergeZoomClips
+            return canMergeZoomClips(ids)
         case .none:
             return false
         }
     }
 
-    private var canMergeVideoClips: Bool {
-        let ids = Array(magnetedIds)
-        guard let c0 = clipManager.clips.first(where: { $0.id == ids[0] }),
-              let c1 = clipManager.clips.first(where: { $0.id == ids[1] }) else { return false }
+    private func canMergeVideoClips(_ ids: Set<UUID>) -> Bool {
+        let idArr = Array(ids)
+        guard let c0 = clipManager.clips.first(where: { $0.id == idArr[0] }),
+              let c1 = clipManager.clips.first(where: { $0.id == idArr[1] }) else { return false }
         let (earlier, later) = c0.timelineStartMs <= c1.timelineStartMs ? (c0, c1) : (c1, c0)
         guard earlier.timelineEndMs == later.timelineStartMs else { return false }
         return earlier.sourceEndMs == later.sourceStartMs
     }
 
-    private var canMergeZoomClips: Bool {
-        let ids = Array(magnetedIds)
-        guard let z0 = clipManager.zoomClips.first(where: { $0.id == ids[0] }),
-              let z1 = clipManager.zoomClips.first(where: { $0.id == ids[1] }) else { return false }
+    private func canMergeZoomClips(_ ids: Set<UUID>) -> Bool {
+        let idArr = Array(ids)
+        guard let z0 = clipManager.zoomClips.first(where: { $0.id == idArr[0] }),
+              let z1 = clipManager.zoomClips.first(where: { $0.id == idArr[1] }) else { return false }
         let (earlier, later) = z0.timelineStartMs <= z1.timelineStartMs ? (z0, z1) : (z1, z0)
         return earlier.timelineEndMs == later.timelineStartMs
     }
@@ -626,15 +678,16 @@ struct TimelineView: View {
     }
 
     private func mergeVideoClips() {
-        guard canMergeVideoClips else { return }
-        let ids = Array(magnetedIds)
-        guard let c0 = clipManager.clips.first(where: { $0.id == ids[0] }),
-              let c1 = clipManager.clips.first(where: { $0.id == ids[1] }) else { return }
+        let mIds = mergeableIds
+        guard canMergeVideoClips(mIds) else { return }
+        let idArr = Array(mIds)
+        guard let c0 = clipManager.clips.first(where: { $0.id == idArr[0] }),
+              let c1 = clipManager.clips.first(where: { $0.id == idArr[1] }) else { return }
 
         let (earlier, _) = c0.timelineStartMs <= c1.timelineStartMs ? (c0, c1) : (c1, c0)
         guard let earlierIdx = clipManager.clips.firstIndex(where: { $0.id == earlier.id }) else { return }
 
-        let laterIdx = clipManager.clips.firstIndex(where: { $0.id != earlier.id && magnetedIds.contains($0.id) })!
+        let laterIdx = clipManager.clips.firstIndex(where: { $0.id != earlier.id && mIds.contains($0.id) })!
         if laterIdx != earlierIdx + 1 {
             let laterClip = clipManager.clips.remove(at: laterIdx)
             let insertAt = laterIdx > earlierIdx ? earlierIdx + 1 : earlierIdx
@@ -648,15 +701,16 @@ struct TimelineView: View {
     }
 
     private func mergeZoomClips() {
-        guard canMergeZoomClips else { return }
-        let ids = Array(magnetedIds)
-        guard let z0 = clipManager.zoomClips.first(where: { $0.id == ids[0] }),
-              let z1 = clipManager.zoomClips.first(where: { $0.id == ids[1] }) else { return }
+        let mIds = mergeableIds
+        guard canMergeZoomClips(mIds) else { return }
+        let idArr = Array(mIds)
+        guard let z0 = clipManager.zoomClips.first(where: { $0.id == idArr[0] }),
+              let z1 = clipManager.zoomClips.first(where: { $0.id == idArr[1] }) else { return }
 
         let (earlier, _) = z0.timelineStartMs <= z1.timelineStartMs ? (z0, z1) : (z1, z0)
         guard let earlierIdx = clipManager.zoomClips.firstIndex(where: { $0.id == earlier.id }) else { return }
 
-        let laterIdx = clipManager.zoomClips.firstIndex(where: { $0.id != earlier.id && magnetedIds.contains($0.id) })!
+        let laterIdx = clipManager.zoomClips.firstIndex(where: { $0.id != earlier.id && mIds.contains($0.id) })!
         if laterIdx != earlierIdx + 1 {
             let laterClip = clipManager.zoomClips.remove(at: laterIdx)
             let insertAt = laterIdx > earlierIdx ? earlierIdx + 1 : earlierIdx

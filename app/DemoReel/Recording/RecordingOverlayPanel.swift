@@ -19,6 +19,7 @@ final class RecordingOverlayPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isMovableByWindowBackground = true
         hidesOnDeactivate = false
+        sharingType = .none
 
         // Position at top-center of the main screen
         if let screen = NSScreen.main {
