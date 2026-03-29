@@ -21,6 +21,7 @@ targets:
           - Generated/DemoReelCoreFFI.h
           - Generated/DemoReelCoreFFI.modulemap
           - Assets.xcassets/**/*.jpg
+          - "**/CLAUDE.md"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.demoreel.app

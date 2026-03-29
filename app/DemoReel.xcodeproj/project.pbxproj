@@ -14,14 +14,10 @@
 		1E15CF88DB49D5A9618D3BA0 /* RecordingOverlayPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F4978D5C5F66FE363001369 /* RecordingOverlayPanel.swift */; };
 		2D326BB549F715A9C5A968D2 /* Clip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01747FBD9CFEE5094403BA58 /* Clip.swift */; };
 		4B3EABA594A5ACFC941CE540 /* TimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBDA14E0A7DCFE079EC0B578 /* TimelineView.swift */; };
-		4C60F7A6BDA81B7C213E7817 /* CLAUDE.md in Resources */ = {isa = PBXBuildFile; fileRef = 48902C5F8DD788D01DCAB870 /* CLAUDE.md */; };
 		5AC8A877F4147EA140183D80 /* AudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF37F4D0A360A3FBE2EC2165 /* AudioCapture.swift */; };
 		60BE27B07798ABFD43A504A6 /* EventLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77821EA51A6E7D9FD1B2AAD9 /* EventLogger.swift */; };
 		8C2E4E26B34618B829509BD3 /* PreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83BFDD4820105159572DDDF2 /* PreviewView.swift */; };
 		91243C424403D82D1E06679D /* ScreenRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F69960E6E04D9E306FFAA2EE /* ScreenRecorder.swift */; };
-		955B7CAF6CCC413D897106CF /* CLAUDE.md in Resources */ = {isa = PBXBuildFile; fileRef = DD0A28B9017556578AF79497 /* CLAUDE.md */; };
-		97397EB319D8487CEFB1CEF6 /* CLAUDE.md in Resources */ = {isa = PBXBuildFile; fileRef = 3D895CBF7C1243E7E1EE620A /* CLAUDE.md */; };
-		9823F930E964D104901BDD74 /* CLAUDE.md in Resources */ = {isa = PBXBuildFile; fileRef = 895BE0AA970835AB55863755 /* CLAUDE.md */; };
 		A20271BE43F4995466AAD8CA /* DemoReelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 941792B02818CA58D3858944 /* DemoReelApp.swift */; };
 		A606CE975A83A084DC82700C /* SourcePickerCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA608C1F70A79110F6A30C84 /* SourcePickerCoordinator.swift */; };
 		ABF2A319981160F36200A66B /* ClipManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB545DB725C10AF883F5E9E1 /* ClipManager.swift */; };
@@ -43,8 +39,6 @@
 		01747FBD9CFEE5094403BA58 /* Clip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clip.swift; sourceTree = "<group>"; };
 		2585DEB05CFE0432B1357304 /* ZoomClip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomClip.swift; sourceTree = "<group>"; };
 		383C3C1138528350C6D6BFB5 /* DemoReelCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoReelCore.swift; sourceTree = "<group>"; };
-		3D895CBF7C1243E7E1EE620A /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
-		48902C5F8DD788D01DCAB870 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
 		51BBB5A3B9889964A65088F2 /* WallpaperCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperCatalog.swift; sourceTree = "<group>"; };
 		52FFCD369CF642189E5DB0B6 /* DemoReel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DemoReel.entitlements; sourceTree = "<group>"; };
 		55DAF5A6D283689F246667A6 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -57,7 +51,6 @@
 		7F4978D5C5F66FE363001369 /* RecordingOverlayPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingOverlayPanel.swift; sourceTree = "<group>"; };
 		83BFDD4820105159572DDDF2 /* PreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewView.swift; sourceTree = "<group>"; };
 		8442CAC3A00230FBB89FD7BA /* ExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportManager.swift; sourceTree = "<group>"; };
-		895BE0AA970835AB55863755 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
 		8A6FA81971BB9558E8413156 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
 		8B099A312D613654F6D3B084 /* ZoomKeyframeEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomKeyframeEditor.swift; sourceTree = "<group>"; };
 		941792B02818CA58D3858944 /* DemoReelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoReelApp.swift; sourceTree = "<group>"; };
@@ -65,7 +58,6 @@
 		AB545DB725C10AF883F5E9E1 /* ClipManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipManager.swift; sourceTree = "<group>"; };
 		AFF32E808D120C70E6836921 /* CursorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorPanel.swift; sourceTree = "<group>"; };
 		C95367E29E4DE15A47052C44 /* .gitkeep */ = {isa = PBXFileReference; path = .gitkeep; sourceTree = "<group>"; };
-		DD0A28B9017556578AF79497 /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
 		E2587285B31D89BA43E751F0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		EA608C1F70A79110F6A30C84 /* SourcePickerCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcePickerCoordinator.swift; sourceTree = "<group>"; };
 		EB4592E704E57E253A488342 /* DemoReel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DemoReel.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -106,7 +98,6 @@
 			isa = PBXGroup;
 			children = (
 				FF37F4D0A360A3FBE2EC2165 /* AudioCapture.swift */,
-				895BE0AA970835AB55863755 /* CLAUDE.md */,
 				77821EA51A6E7D9FD1B2AAD9 /* EventLogger.swift */,
 				7F4978D5C5F66FE363001369 /* RecordingOverlayPanel.swift */,
 				FD882DCDFC67858E4608DD7A /* RecordingOverlayView.swift */,
@@ -130,7 +121,6 @@
 			isa = PBXGroup;
 			children = (
 				68F935ED02583659A6E20DA3 /* AppState.swift */,
-				DD0A28B9017556578AF79497 /* CLAUDE.md */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -138,7 +128,6 @@
 		E320BD03EF94627F2A81C0BD /* Export */ = {
 			isa = PBXGroup;
 			children = (
-				48902C5F8DD788D01DCAB870 /* CLAUDE.md */,
 				8442CAC3A00230FBB89FD7BA /* ExportManager.swift */,
 				FA51FEBAA10F1CFD4F7EE383 /* ExportSheet.swift */,
 				5C84D3B18A42315F55912D3F /* NativeExporter.swift */,
@@ -157,7 +146,6 @@
 		FBE1E4A384113BCD30B4CA61 /* Editor */ = {
 			isa = PBXGroup;
 			children = (
-				3D895CBF7C1243E7E1EE620A /* CLAUDE.md */,
 				01747FBD9CFEE5094403BA58 /* Clip.swift */,
 				AB545DB725C10AF883F5E9E1 /* ClipManager.swift */,
 				AFF32E808D120C70E6836921 /* CursorPanel.swift */,
@@ -230,10 +218,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				01F55BBB9F0681262F782674 /* Assets.xcassets in Resources */,
-				9823F930E964D104901BDD74 /* CLAUDE.md in Resources */,
-				955B7CAF6CCC413D897106CF /* CLAUDE.md in Resources */,
-				4C60F7A6BDA81B7C213E7817 /* CLAUDE.md in Resources */,
-				97397EB319D8487CEFB1CEF6 /* CLAUDE.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
