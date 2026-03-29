@@ -24,6 +24,7 @@ final class KeyboardShortcutMonitor {
         case deactivateScissor
         case undo
         case redo
+        case nudgeFocusPoint(dx: Double, dy: Double)
     }
 
     private var monitor: Any?
@@ -63,8 +64,28 @@ final class KeyboardShortcutMonitor {
                 }
             }
 
-            // Only handle bare keystrokes — ignore Cmd, Option, Control, Shift
-            guard flags.isEmpty || flags == .function else { return event }
+            // Only handle bare keystrokes (plus arrow-key modifiers and Shift for nudge)
+            let bareOrArrow = flags.isEmpty
+                || flags == .function
+                || flags == [.function, .numericPad]
+                || flags == [.function, .numericPad, .shift]
+                || flags == .shift
+            guard bareOrArrow else { return event }
+
+            // Arrow keys for focus point nudge (before other keyCode actions)
+            let arrowDirections: [UInt16: (Double, Double)] = [
+                123: (-1, 0),  // left
+                124: (1, 0),   // right
+                125: (0, 1),   // down
+                126: (0, -1),  // up
+            ]
+            if let direction = arrowDirections[event.keyCode] {
+                let step: Double = flags.contains(.shift) ? 1.0 : 10.0
+                self.lastAction = ActionEvent(action: .nudgeFocusPoint(
+                    dx: direction.0 * step, dy: direction.1 * step
+                ))
+                return nil
+            }
 
             // Check keyCode actions first (for special keys like Delete, Escape)
             if let action = Self.keyCodeActions[event.keyCode] {

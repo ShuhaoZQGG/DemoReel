@@ -389,7 +389,20 @@ struct EditorView: View {
             clipManager.undo()
         case .redo:
             clipManager.redo()
+        case .nudgeFocusPoint(let dx, let dy):
+            nudgeFocusPoint(dx: dx, dy: dy)
         }
+    }
+
+    private func nudgeFocusPoint(dx: Double, dy: Double) {
+        guard !zoomConfig.followCursor,
+              case .zoomClips(let ids) = selection, ids.count == 1,
+              let id = ids.first,
+              let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id }) else { return }
+        clipManager.saveUndoStateDebounced()
+        let clip = clipManager.zoomClips[idx]
+        clipManager.zoomClips[idx].centerX = min(max(clip.centerX + dx, 0), videoWidth)
+        clipManager.zoomClips[idx].centerY = min(max(clip.centerY + dy, 0), videoHeight)
     }
 
     private func deleteSelected() {
