@@ -55,6 +55,7 @@ mod tests {
             bg_gradient_from_hex: "#667eea".to_string(),
             bg_gradient_to_hex: "#764ba2".to_string(),
             bg_gradient_angle: 135.0,
+            bg_image_name: String::new(),
             padding: 32.0,
             corner_radius: 12.0,
             shadow_enabled: true,

@@ -197,7 +197,7 @@ pub struct SmoothedPoint {
 /// Background configuration for the video canvas.
 ///
 /// Uses a type string + fields pattern for FFI compatibility.
-/// `bg_type`: "solid", "gradient", or "transparent"
+/// `bg_type`: "solid", "gradient", "transparent", or "image"
 #[derive(uniffi::Record, Clone, Debug)]
 pub struct BackgroundConfig {
     pub bg_type: String,
@@ -205,6 +205,7 @@ pub struct BackgroundConfig {
     pub gradient_from_hex: String,
     pub gradient_to_hex: String,
     pub gradient_angle_degrees: f64,
+    pub image_name: String,
 }
 
 impl Default for BackgroundConfig {
@@ -215,6 +216,7 @@ impl Default for BackgroundConfig {
             gradient_from_hex: "#667eea".to_string(),
             gradient_to_hex: "#764ba2".to_string(),
             gradient_angle_degrees: 135.0,
+            image_name: String::new(),
         }
     }
 }
@@ -374,6 +376,8 @@ pub struct ProjectFile {
     pub bg_gradient_from_hex: String,
     pub bg_gradient_to_hex: String,
     pub bg_gradient_angle: f64,
+    #[serde(default)]
+    pub bg_image_name: String,
     pub padding: f64,
     pub corner_radius: f64,
     pub shadow_enabled: bool,

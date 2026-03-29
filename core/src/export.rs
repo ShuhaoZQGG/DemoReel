@@ -289,6 +289,8 @@ fn build_filter_complex(
         style.background.hex.clone()
     } else if style.background.bg_type == "gradient" {
         style.background.gradient_from_hex.clone()
+    } else if style.background.bg_type == "image" {
+        "#1a1a2e".to_string()
     } else {
         "#000000".to_string()
     };
@@ -342,9 +344,9 @@ fn build_filter_complex(
         "color=c={}:s={}x{}:d=999[bg]",
         bg_color, output_w, output_h
     ));
-    filters.push(format!(
-        "[bg][rounded]overlay=(W-w)/2:(H-h)/2:shortest=1[out]",
-    ));
+    filters.push(
+        "[bg][rounded]overlay=(W-w)/2:(H-h)/2:shortest=1[out]".to_string(),
+    );
 
     filters.join(";")
 }
