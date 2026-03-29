@@ -49,7 +49,17 @@ struct EditorView: View {
                     styleConfig: styleConfig,
                     cursorConfig: cursorConfig,
                     videoWidth: videoWidth,
-                    videoHeight: videoHeight
+                    videoHeight: videoHeight,
+                    selection: selection,
+                    onFocusPointDragged: { clipID, newCenterX, newCenterY in
+                        guard let idx = clipManager.zoomClips.firstIndex(where: { $0.id == clipID }) else { return }
+                        clipManager.zoomClips[idx].centerX = newCenterX
+                        clipManager.zoomClips[idx].centerY = newCenterY
+                    },
+                    onDragBegan: {
+                        isPlaying = false
+                        clipManager.saveUndoState()
+                    }
                 )
                 .frame(minHeight: 300)
 

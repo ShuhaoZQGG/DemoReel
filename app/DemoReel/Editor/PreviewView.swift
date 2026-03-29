@@ -15,10 +15,15 @@ struct PreviewView: View {
     let cursorConfig: CursorConfig
     let videoWidth: Double
     let videoHeight: Double
+    var selection: TrackSelection = .none
+    var onFocusPointDragged: ((UUID, Double, Double) -> Void)?
+    var onDragBegan: (() -> Void)?
 
     @State private var player: AVPlayer?
     /// Cache of AVPlayers keyed by URL path, to avoid re-creating players when switching between sources.
     @State private var playerCache: [String: AVPlayer] = [:]
+    /// Tracks whether undo state has been saved for the current drag gesture.
+    @State private var dragUndoSaved = false
 
     var body: some View { 
         GeometryReader { geo in
@@ -47,6 +52,10 @@ struct PreviewView: View {
                         .animation(.easeInOut(duration: 0.3), value: currentZoomAnchor.y)
                         .padding(styleConfig.padding)
                         .zIndex(1)
+
+                    // Draggable focus point overlay — outside scaleEffect
+                    focusPointOverlay(containerSize: geo.size)
+                        .zIndex(2)
                 } else {
                     Text("No video loaded")
                         .foregroundStyle(.secondary)
@@ -132,11 +141,8 @@ struct PreviewView: View {
         return UnitPoint(x: 0.5 + cos(rad) * 0.5, y: 0.5 + sin(rad) * 0.5)
     }
 
-    /// Video and cursor composited together. The cursor is drawn as a Canvas
-    /// that shares the exact same frame as the video, so they always move together.
-    @ViewBuilder
-    private func videoWithCursor(player: AVPlayer, containerSize: CGSize) -> some View {
-        // Use the video's aspect ratio to determine the actual rendered size
+    /// Compute the video render size and origin within the container, accounting for padding.
+    private func videoRenderRect(in containerSize: CGSize) -> (origin: CGPoint, size: CGSize) {
         let padding = styleConfig.padding
         let availW = containerSize.width - padding * 2
         let availH = containerSize.height - padding * 2
@@ -144,12 +150,22 @@ struct PreviewView: View {
         let viewAspect = availW / max(availH, 1)
         let renderW = videoAspect > viewAspect ? availW : availH * videoAspect
         let renderH = videoAspect > viewAspect ? availW / videoAspect : availH
+        let originX = (containerSize.width - renderW) / 2
+        let originY = (containerSize.height - renderH) / 2
+        return (CGPoint(x: originX, y: originY), CGSize(width: renderW, height: renderH))
+    }
+
+    /// Video and cursor composited together. The cursor is drawn as a Canvas
+    /// that shares the exact same frame as the video, so they always move together.
+    @ViewBuilder
+    private func videoWithCursor(player: AVPlayer, containerSize: CGSize) -> some View {
+        let rect = videoRenderRect(in: containerSize)
 
         ZStack {
             VideoPlayerView(player: player)
             cursorCanvasView
         }
-        .frame(width: renderW, height: renderH)
+        .frame(width: rect.size.width, height: rect.size.height)
     }
 
     /// Cursor overlay using standard SwiftUI views (not Canvas) so both
@@ -183,6 +199,65 @@ struct PreviewView: View {
                         .position(x: x, y: y)
                 }
             }
+        }
+    }
+
+    /// The zoom clip that is both the sole selection and contains the current playhead.
+    /// Returns nil when follow-cursor mode is active (center is dynamically tracked).
+    private var activeOverlayClip: ZoomClip? {
+        guard !zoomConfig.followCursor else { return nil }
+        guard case .zoomClips(let ids) = selection, ids.count == 1,
+              let id = ids.first else { return nil }
+        let timestampMs = UInt64(max(0, timelinePosition) * 1000)
+        return zoomClips.first { $0.id == id && timestampMs >= $0.timelineStartMs && timestampMs <= $0.timelineEndMs }
+    }
+
+    /// Draggable crosshair overlay for repositioning the zoom focus point.
+    @ViewBuilder
+    private func focusPointOverlay(containerSize: CGSize) -> some View {
+        if let clip = activeOverlayClip, videoWidth > 0, videoHeight > 0 {
+            let rect = videoRenderRect(in: containerSize)
+            let fracX = clip.centerX / videoWidth
+            let fracY = clip.centerY / videoHeight
+            let displayX = rect.origin.x + fracX * rect.size.width
+            let displayY = rect.origin.y + fracY * rect.size.height
+
+            ZStack {
+                // Crosshair lines
+                Rectangle()
+                    .fill(.white.opacity(0.6))
+                    .frame(width: 1, height: 24)
+                Rectangle()
+                    .fill(.white.opacity(0.6))
+                    .frame(width: 24, height: 1)
+                // Center circle
+                Circle()
+                    .stroke(.white, lineWidth: 1.5)
+                    .frame(width: 16, height: 16)
+                Circle()
+                    .fill(.white.opacity(0.2))
+                    .frame(width: 16, height: 16)
+            }
+            .shadow(color: .black.opacity(0.5), radius: 2)
+            .position(x: displayX, y: displayY)
+            .contentShape(Rectangle().size(width: 32, height: 32).offset(x: -16, y: -16))
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        if !dragUndoSaved {
+                            dragUndoSaved = true
+                            onDragBegan?()
+                        }
+                        let newCenterX = ((value.location.x - rect.origin.x) / rect.size.width * videoWidth)
+                            .clamped(to: 0...videoWidth)
+                        let newCenterY = ((value.location.y - rect.origin.y) / rect.size.height * videoHeight)
+                            .clamped(to: 0...videoHeight)
+                        onFocusPointDragged?(clip.id, newCenterX, newCenterY)
+                    }
+                    .onEnded { _ in
+                        dragUndoSaved = false
+                    }
+            )
         }
     }
 
