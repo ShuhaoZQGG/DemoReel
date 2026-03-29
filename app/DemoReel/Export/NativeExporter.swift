@@ -14,6 +14,7 @@ final class NativeExporter {
     private let clips: [Clip]
     private let zoomKeyframes: [ZoomKeyframe]
     private let zoomClips: [ZoomClip]
+    private let mediaItems: [MediaItem]
     private let onProgress: (ExportProgress) -> Void
     private let onComplete: (String) -> Void
     private let onError: (String) -> Void
@@ -22,6 +23,7 @@ final class NativeExporter {
          clips: [Clip],
          zoomKeyframes: [ZoomKeyframe],
          zoomClips: [ZoomClip] = [],
+         mediaItems: [MediaItem] = [],
          onProgress: @escaping (ExportProgress) -> Void,
          onComplete: @escaping (String) -> Void,
          onError: @escaping (String) -> Void) {
@@ -29,6 +31,7 @@ final class NativeExporter {
         self.clips = clips
         self.zoomKeyframes = zoomKeyframes
         self.zoomClips = zoomClips
+        self.mediaItems = mediaItems
         self.onProgress = onProgress
         self.onComplete = onComplete
         self.onError = onError
@@ -58,14 +61,31 @@ final class NativeExporter {
         return result
     }
 
+    /// Resolve the AVURLAsset and video track for a clip.
+    private func resolveAsset(for clip: Clip, fallbackAsset: AVURLAsset, fallbackTrack: AVAssetTrack, assetCache: [UUID: (AVURLAsset, AVAssetTrack)]) -> (AVURLAsset, AVAssetTrack) {
+        if let mediaId = clip.mediaItemId, let cached = assetCache[mediaId] {
+            return cached
+        }
+        return (fallbackAsset, fallbackTrack)
+    }
+
     private func runExport() throws {
         onProgress(ExportProgress(percent: 1, stage: "Preparing..."))
 
-        // --- Load source video ---
+        // --- Load primary source video (fallback for legacy clips) ---
         let sourceURL = URL(fileURLWithPath: config.inputVideoPath)
         let asset = AVURLAsset(url: sourceURL)
         guard let videoTrack = asset.tracks(withMediaType: .video).first else {
             throw fail("No video track in source")
+        }
+
+        // --- Pre-load all media item assets ---
+        var assetCache: [UUID: (AVURLAsset, AVAssetTrack)] = [:]
+        for item in mediaItems {
+            let itemAsset = AVURLAsset(url: item.fileURL)
+            if let track = itemAsset.tracks(withMediaType: .video).first {
+                assetCache[item.id] = (itemAsset, track)
+            }
         }
 
         let naturalSize = videoTrack.naturalSize
@@ -197,14 +217,19 @@ final class NativeExporter {
                 }
             }
 
+            // Resolve which video source to read from for this clip
+            let (clipAsset, clipTrack) = resolveAsset(for: clip, fallbackAsset: asset, fallbackTrack: videoTrack, assetCache: assetCache)
+            let clipVideoW = Double(clipTrack.naturalSize.width)
+            let clipVideoH = Double(clipTrack.naturalSize.height)
+
             // Read frames for this clip using a time-ranged AVAssetReader
             let clipStartTime = CMTime(value: Int64(clip.sourceStartMs), timescale: 1000)
             let clipEndTime = CMTime(value: Int64(clip.sourceEndMs), timescale: 1000)
             let timeRange = CMTimeRange(start: clipStartTime, end: clipEndTime)
 
-            let clipReader = try AVAssetReader(asset: asset)
+            let clipReader = try AVAssetReader(asset: clipAsset)
             clipReader.timeRange = timeRange
-            let clipVideoOutput = AVAssetReaderTrackOutput(track: videoTrack, outputSettings: [
+            let clipVideoOutput = AVAssetReaderTrackOutput(track: clipTrack, outputSettings: [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
             ])
             clipVideoOutput.alwaysCopiesSampleData = false
@@ -244,7 +269,25 @@ final class NativeExporter {
                     let scale = zoomClips.isEmpty
                         ? zoomScaleAt(keyframes: keyframes, timestampMs: timelineMs, config: config.zoomConfig)
                         : ClipManager.zoomScaleWithPerClipEase(zoomClips: zoomClips, timestampMs: timelineMs, globalConfig: config.zoomConfig)
-                    let centerVec = zoomCenterAt(keyframes: keyframes, timestampMs: timelineMs)
+                    // Derive hold from clip duration — global holdMs is only for auto-generation
+                    let effectiveZoomConfig: ZoomConfig
+                    if let zc = zoomClips.first(where: { timelineMs >= $0.timelineStartMs && timelineMs <= $0.timelineEndMs }) {
+                        let easeIn = zc.easeEnabled ? zc.easeInMs : config.zoomConfig.easeInMs
+                        let easeOut = zc.easeEnabled ? zc.easeOutMs : config.zoomConfig.easeOutMs
+                        let holdMs = zc.durationMs > (easeIn + easeOut)
+                            ? zc.durationMs - easeIn - easeOut : 0
+                        effectiveZoomConfig = config.zoomConfig.with(
+                            easeInMs: easeIn, holdMs: holdMs, easeOutMs: easeOut
+                        )
+                    } else {
+                        effectiveZoomConfig = config.zoomConfig
+                    }
+                    let centerVec = zoomCenterAtFollowing(
+                        keyframes: keyframes,
+                        smoothedPath: smoothedPts,
+                        timestampMs: timelineMs,
+                        config: effectiveZoomConfig
+                    )
                     let anchor: UnitPoint
                     if centerVec.count == 2, screenW > 0, screenH > 0 {
                         let ax = min(max(centerVec[0] / screenW, 0), 1)
@@ -264,8 +307,8 @@ final class NativeExporter {
                         cursorPoint: cursorPoint,
                         styleConfig: config.styleConfig,
                         cursorConfig: config.cursorConfig,
-                        videoWidth: screenW,
-                        videoHeight: screenH,
+                        videoWidth: clipVideoW,
+                        videoHeight: clipVideoH,
                         outputSize: outputSize
                     )
 

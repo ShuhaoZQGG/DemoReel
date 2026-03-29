@@ -21,6 +21,11 @@ struct DemoReelApp: App {
                 }
                 .keyboardShortcut("n")
 
+                Button("Import Video...") {
+                    importVideo()
+                }
+                .keyboardShortcut("i")
+
                 Divider()
 
                 Button("Open Project...") {
@@ -46,6 +51,28 @@ struct DemoReelApp: App {
                 }
                 .keyboardShortcut("e")
             }
+        }
+    }
+
+    private func importVideo() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.movie, .mpeg4Movie, .quickTimeMovie]
+        panel.allowsMultipleSelection = true
+        panel.message = "Select video files to import"
+
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+
+        // If we're on the recording screen, switch to editor first
+        if appState.currentScreen == .recording {
+            appState.currentScreen = .editor
+        }
+
+        // Send each URL to the editor's media pool
+        for url in panel.urls {
+            NotificationCenter.default.post(
+                name: .importVideo,
+                object: url
+            )
         }
     }
 
@@ -76,4 +103,5 @@ struct DemoReelApp: App {
 extension Notification.Name {
     static let saveProject = Notification.Name("saveProject")
     static let exportVideo = Notification.Name("exportVideo")
+    static let importVideo = Notification.Name("importVideo")
 }

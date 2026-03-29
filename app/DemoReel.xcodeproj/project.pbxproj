@@ -16,8 +16,10 @@
 		4B3EABA594A5ACFC941CE540 /* TimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBDA14E0A7DCFE079EC0B578 /* TimelineView.swift */; };
 		5AC8A877F4147EA140183D80 /* AudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF37F4D0A360A3FBE2EC2165 /* AudioCapture.swift */; };
 		60BE27B07798ABFD43A504A6 /* EventLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77821EA51A6E7D9FD1B2AAD9 /* EventLogger.swift */; };
+		828D574913AF1F366C12AC97 /* MediaItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5699930F24F39749C068008B /* MediaItem.swift */; };
 		8C2E4E26B34618B829509BD3 /* PreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83BFDD4820105159572DDDF2 /* PreviewView.swift */; };
 		91243C424403D82D1E06679D /* ScreenRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F69960E6E04D9E306FFAA2EE /* ScreenRecorder.swift */; };
+		95A1D70CCE2E00DF23DF9E4A /* MediaPoolPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBCAC7FF775703A9576D982D /* MediaPoolPanel.swift */; };
 		A20271BE43F4995466AAD8CA /* DemoReelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 941792B02818CA58D3858944 /* DemoReelApp.swift */; };
 		A606CE975A83A084DC82700C /* SourcePickerCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA608C1F70A79110F6A30C84 /* SourcePickerCoordinator.swift */; };
 		ABF2A319981160F36200A66B /* ClipManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB545DB725C10AF883F5E9E1 /* ClipManager.swift */; };
@@ -42,6 +44,7 @@
 		51BBB5A3B9889964A65088F2 /* WallpaperCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WallpaperCatalog.swift; sourceTree = "<group>"; };
 		52FFCD369CF642189E5DB0B6 /* DemoReel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DemoReel.entitlements; sourceTree = "<group>"; };
 		55DAF5A6D283689F246667A6 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		5699930F24F39749C068008B /* MediaItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaItem.swift; sourceTree = "<group>"; };
 		5C84D3B18A42315F55912D3F /* NativeExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeExporter.swift; sourceTree = "<group>"; };
 		68F935ED02583659A6E20DA3 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		68FCC1BD7D911A52BA902AD6 /* KeyboardShortcutMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutMonitor.swift; sourceTree = "<group>"; };
@@ -58,6 +61,7 @@
 		AB545DB725C10AF883F5E9E1 /* ClipManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipManager.swift; sourceTree = "<group>"; };
 		AFF32E808D120C70E6836921 /* CursorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorPanel.swift; sourceTree = "<group>"; };
 		C95367E29E4DE15A47052C44 /* .gitkeep */ = {isa = PBXFileReference; path = .gitkeep; sourceTree = "<group>"; };
+		DBCAC7FF775703A9576D982D /* MediaPoolPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPoolPanel.swift; sourceTree = "<group>"; };
 		E2587285B31D89BA43E751F0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		EA608C1F70A79110F6A30C84 /* SourcePickerCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcePickerCoordinator.swift; sourceTree = "<group>"; };
 		EB4592E704E57E253A488342 /* DemoReel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DemoReel.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -151,6 +155,8 @@
 				AFF32E808D120C70E6836921 /* CursorPanel.swift */,
 				8A6FA81971BB9558E8413156 /* EditorView.swift */,
 				68FCC1BD7D911A52BA902AD6 /* KeyboardShortcutMonitor.swift */,
+				5699930F24F39749C068008B /* MediaItem.swift */,
+				DBCAC7FF775703A9576D982D /* MediaPoolPanel.swift */,
 				83BFDD4820105159572DDDF2 /* PreviewView.swift */,
 				9F3CB6CC10C3A51D56C347A8 /* StylePanel.swift */,
 				FBDA14E0A7DCFE079EC0B578 /* TimelineView.swift */,
@@ -241,6 +247,8 @@
 				F1D1A3D267F35F65D8D6A79C /* ExportManager.swift in Sources */,
 				AF196859F30BBE74890B81FA /* ExportSheet.swift in Sources */,
 				D93ADDEE215DB289C7C365B3 /* KeyboardShortcutMonitor.swift in Sources */,
+				828D574913AF1F366C12AC97 /* MediaItem.swift in Sources */,
+				95A1D70CCE2E00DF23DF9E4A /* MediaPoolPanel.swift in Sources */,
 				BD086B8F5F43B942C9F8AF37 /* NativeExporter.swift in Sources */,
 				8C2E4E26B34618B829509BD3 /* PreviewView.swift in Sources */,
 				1E15CF88DB49D5A9618D3BA0 /* RecordingOverlayPanel.swift in Sources */,

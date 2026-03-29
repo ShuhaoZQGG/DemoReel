@@ -12,6 +12,7 @@ struct ExportSheet: View {
     let clips: [Clip]
     let zoomKeyframes: [ZoomKeyframe]
     let zoomClips: [ZoomClip]
+    var mediaItems: [MediaItem] = []
 
     @State private var selectedFormat = "mp4"
     @State private var selectedResolution = "source"
@@ -130,7 +131,7 @@ struct ExportSheet: View {
     }
 
     private func startExport() {
-        guard let videoPath, let eventsPath else {
+        guard let videoPath else {
             errorMessage = "No recording loaded"
             return
         }
@@ -144,7 +145,7 @@ struct ExportSheet: View {
 
         let config = ExportConfig(
             inputVideoPath: videoPath.path,
-            eventsJsonPath: eventsPath.path,
+            eventsJsonPath: eventsPath?.path ?? "",
             outputPath: outputURL.path,
             zoomConfig: zoomConfig,
             styleConfig: styleConfig,
@@ -185,6 +186,7 @@ struct ExportSheet: View {
                 clips: self.clips,
                 zoomKeyframes: self.zoomKeyframes,
                 zoomClips: self.zoomClips,
+                mediaItems: self.mediaItems,
                 onProgress: { manager.onProgress(progress: $0) },
                 onComplete: { manager.onComplete(outputPath: $0) },
                 onError: { manager.onError(message: $0) }

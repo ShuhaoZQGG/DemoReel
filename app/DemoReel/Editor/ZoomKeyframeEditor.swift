@@ -70,6 +70,8 @@ struct ZoomClipTrack: View {
                     easeOutResizeOffset: easeOutResizeVisualOffset(for: zc)
                 )
                 .onContinuousHover { phase in
+                    // Skip hover tracking during drag to avoid expensive cursor/redraw calls
+                    guard !gestureLocked else { return }
                     switch phase {
                     case .active(let location):
                         let clipWidth = max(visualWidth, 8)
@@ -155,6 +157,7 @@ struct ZoomClipTrack: View {
                         }
                 )
                 .offset(x: visualX + (isDragging ? dragOffset : 0))
+                .animation(nil, value: dragOffset)
                 .opacity(isDragging ? 0.6 : 1.0)
                 .zIndex(isDragging ? 10 : 0)
             }

@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 /// Main editor layout: preview on top, timeline below, tabbed controls in sidebar.
 struct EditorView: View {
@@ -23,8 +24,11 @@ struct EditorView: View {
     @State private var selection: TrackSelection = .none
     @State private var keyMonitor = KeyboardShortcutMonitor()
     @State private var restorableZoomCount: Int = 0
+    /// The video URL currently being previewed (changes as playhead moves across multi-source clips).
+    @State private var activeVideoURL: URL?
 
     enum SidebarTab: String, CaseIterable {
+        case media = "Media"
         case zoom = "Zoom"
         case style = "Style"
         case cursor = "Cursor"
@@ -34,7 +38,7 @@ struct EditorView: View {
         HSplitView {
             VStack(spacing: 0) {
                 PreviewView(
-                    videoURL: appState.videoPath,
+                    videoURL: activeVideoURL ?? appState.videoPath,
                     keyframes: clipManager.zoomKeyframesForPreview(),
                     zoomClips: clipManager.zoomClips,
                     smoothedPoints: smoothedPoints,
@@ -83,6 +87,8 @@ struct EditorView: View {
                 .padding(8)
 
                 switch selectedTab {
+                case .media:
+                    MediaPoolPanel(clipManager: clipManager)
                 case .zoom:
                     ZoomConfigPanel(
                         config: $zoomConfig,
@@ -131,16 +137,26 @@ struct EditorView: View {
                 cursorConfig: $cursorConfig,
                 clips: clipManager.clipsByTimelineOrder,
                 zoomKeyframes: clipManager.zoomKeyframesForPreview(),
-                zoomClips: clipManager.zoomClips
+                zoomClips: clipManager.zoomClips,
+                mediaItems: clipManager.mediaItems
             )
         }
         .task {
+            activeVideoURL = appState.videoPath
             loadEventsAndGenerate()
             loadProjectSettingsIfNeeded()
         }
         .onChange(of: keyMonitor.lastAction) { _, event in
             guard let event else { return }
             handleKeyAction(event.action)
+        }
+        .onChange(of: timelinePosition) { _, newPos in
+            // Update active video source when scrubbing (playback timer handles this during play)
+            if !isPlaying {
+                if let (_, _, mediaItemId) = clipManager.sourceTimeForTimelinePosition(newPos) {
+                    updateActiveVideoURL(mediaItemId: mediaItemId)
+                }
+            }
         }
         .onChange(of: isPlaying) { _, playing in
             if playing {
@@ -161,10 +177,22 @@ struct EditorView: View {
         .onReceive(NotificationCenter.default.publisher(for: .exportVideo)) { _ in
             showExportSheet = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .importVideo)) { notification in
+            if let url = notification.object as? URL {
+                importVideoToPool(url: url)
+            }
+        }
     }
 
     private func loadEventsAndGenerate() {
-        guard let eventsPath = appState.eventsPath else { return }
+        // Auto-register the recording video as a media item if not already present
+        registerRecordingAsMediaItem()
+
+        guard let eventsPath = appState.eventsPath else {
+            // No event log (e.g. empty project) — just initialize clips from trim
+            initializeClipsIfNeeded()
+            return
+        }
         guard let json = try? String(contentsOf: eventsPath, encoding: .utf8) else { return }
         guard let mouseEvents = try? mouseEventsFromLog(json: json) else { return }
 
@@ -180,20 +208,69 @@ struct EditorView: View {
         )
         smoothedPoints = smoothCursorPath(positions: mouseEvents, alpha: 0.3)
 
+        initializeClipsIfNeeded()
+
+        // Initialize zoom clips from auto-generated keyframes
+        clipManager.initializeZoomClips(from: generatedKeyframes)
+        updateRestorableZoomCount()
+    }
+
+    private func initializeClipsIfNeeded() {
         if trimEnd <= 0 {
             trimEnd = appState.recordingDuration
         }
 
         if clipManager.clips.isEmpty {
-            clipManager.initializeFromTrim(
-                startMs: UInt64(trimStart * 1000),
-                endMs: UInt64(trimEnd * 1000)
-            )
-        }
+            // Find the media item for the recording, if registered
+            let mediaId = clipManager.mediaItems.first(where: {
+                appState.videoPath != nil && $0.filePath == appState.videoPath!.path
+            })?.id
 
-        // Initialize zoom clips from auto-generated keyframes
-        clipManager.initializeZoomClips(from: generatedKeyframes)
-        updateRestorableZoomCount()
+            let clip = Clip(
+                sourceStartMs: UInt64(trimStart * 1000),
+                sourceEndMs: UInt64(trimEnd * 1000),
+                timelineStartMs: 0,
+                mediaItemId: mediaId
+            )
+            clipManager.clips = [clip]
+        }
+    }
+
+    /// Register the screen recording video as a media pool item.
+    private func registerRecordingAsMediaItem() {
+        guard let videoURL = appState.videoPath else { return }
+        // Skip if already registered
+        if clipManager.mediaItems.contains(where: { $0.filePath == videoURL.path }) { return }
+
+        Task {
+            do {
+                let item = try await clipManager.addMediaItem(url: videoURL)
+                // Update video dimensions from the asset
+                await MainActor.run {
+                    if videoWidth == 0 { videoWidth = item.width }
+                    if videoHeight == 0 { videoHeight = item.height }
+                    activeVideoURL = videoURL
+                    // Assign mediaItemId to any legacy clips that don't have one
+                    for i in clipManager.clips.indices where clipManager.clips[i].mediaItemId == nil {
+                        clipManager.clips[i].mediaItemId = item.id
+                    }
+                }
+            } catch {
+                // Fallback: still works with legacy single-source path
+            }
+        }
+    }
+
+    /// Import a video file into the media pool from the File menu.
+    private func importVideoToPool(url: URL) {
+        Task {
+            do {
+                try await clipManager.addMediaItem(url: url)
+                await MainActor.run { selectedTab = .media }
+            } catch {
+                // Silently skip files that fail to load
+            }
+        }
     }
 
     private func splitAtPlayhead() {
@@ -251,8 +328,9 @@ struct EditorView: View {
             let dt = 1.0 / 30.0
             timelinePosition += dt
 
-            if let (sourceMs, _) = clipManager.sourceTimeForTimelinePosition(timelinePosition) {
+            if let (sourceMs, _, mediaItemId) = clipManager.sourceTimeForTimelinePosition(timelinePosition) {
                 currentTime = Double(sourceMs) / 1000.0
+                updateActiveVideoURL(mediaItemId: mediaItemId)
             } else {
                 // In a gap — show black/nothing
                 currentTime = -1
@@ -270,6 +348,21 @@ struct EditorView: View {
         playbackTimer = nil
     }
 
+    /// Resolve which video file to show in preview based on the active clip's media item.
+    private func updateActiveVideoURL(mediaItemId: UUID?) {
+        if let id = mediaItemId, let item = clipManager.mediaItems.first(where: { $0.id == id }) {
+            let url = item.fileURL
+            if activeVideoURL != url {
+                activeVideoURL = url
+            }
+        } else {
+            // Legacy clip — fall back to appState.videoPath
+            if activeVideoURL != appState.videoPath {
+                activeVideoURL = appState.videoPath
+            }
+        }
+    }
+
     private func handleKeyAction(_ action: KeyboardShortcutMonitor.EditorAction) {
         switch action {
         case .toggleScissor:
@@ -282,6 +375,10 @@ struct EditorView: View {
         case .deactivateScissor:
             scissorModeActive = false
             zoomPlacementActive = false
+        case .undo:
+            clipManager.undo()
+        case .redo:
+            clipManager.redo()
         }
     }
 
@@ -334,7 +431,10 @@ struct EditorView: View {
             holdMs: project.zoomHoldMs,
             easeOutMs: project.zoomEaseOutMs,
             mergeThresholdMs: project.zoomMergeThresholdMs,
-            enabled: project.zoomEnabled
+            enabled: project.zoomEnabled,
+            idleTimeoutMs: project.zoomIdleTimeoutMs,
+            velocityThreshold: project.zoomVelocityThreshold,
+            followCursor: project.zoomFollowCursor
         )
         styleConfig = StyleConfig(
             background: BackgroundConfig(
@@ -388,6 +488,9 @@ struct EditorView: View {
             zoomEaseOutMs: zoomConfig.easeOutMs,
             zoomMergeThresholdMs: zoomConfig.mergeThresholdMs,
             zoomEnabled: zoomConfig.enabled,
+            zoomIdleTimeoutMs: zoomConfig.idleTimeoutMs,
+            zoomVelocityThreshold: zoomConfig.velocityThreshold,
+            zoomFollowCursor: zoomConfig.followCursor,
             bgType: styleConfig.background.bgType,
             bgHex: styleConfig.background.hex,
             bgGradientFromHex: styleConfig.background.gradientFromHex,
@@ -430,9 +533,21 @@ struct EditorView: View {
         if let data = try? JSONEncoder().encode(clipManager.zoomClips) {
             try? data.write(to: zoomURL)
         }
+        // Save media items
+        let mediaURL = projectURL.appendingPathExtension("media.json")
+        if let data = try? JSONEncoder().encode(clipManager.mediaItems) {
+            try? data.write(to: mediaURL)
+        }
     }
 
     private func loadClips(projectURL: URL) {
+        // Load media items first (clips reference them)
+        let mediaURL = projectURL.appendingPathExtension("media.json")
+        if let data = try? Data(contentsOf: mediaURL),
+           let items = try? JSONDecoder().decode([MediaItem].self, from: data) {
+            clipManager.mediaItems = items
+        }
+
         let clipsURL = projectURL.appendingPathExtension("clips.json")
         if let data = try? Data(contentsOf: clipsURL),
            let clips = try? JSONDecoder().decode([Clip].self, from: data) {
@@ -469,14 +584,7 @@ struct ZoomConfigPanel: View {
                 LabeledContent("Scale") {
                     Slider(value: Binding(
                         get: { config.scale },
-                        set: { config = ZoomConfig(
-                            scale: $0,
-                            easeInMs: config.easeInMs,
-                            holdMs: config.holdMs,
-                            easeOutMs: config.easeOutMs,
-                            mergeThresholdMs: config.mergeThresholdMs,
-                            enabled: config.enabled
-                        )}
+                        set: { config = config.with(scale: $0) }
                     ), in: 1.0...4.0, step: 0.1)
                     Text(String(format: "%.1fx", config.scale))
                         .monospacedDigit()
@@ -486,14 +594,7 @@ struct ZoomConfigPanel: View {
                 LabeledContent("Ease In") {
                     Slider(value: Binding(
                         get: { Double(config.easeInMs) },
-                        set: { config = ZoomConfig(
-                            scale: config.scale,
-                            easeInMs: UInt64($0),
-                            holdMs: config.holdMs,
-                            easeOutMs: config.easeOutMs,
-                            mergeThresholdMs: config.mergeThresholdMs,
-                            enabled: config.enabled
-                        )}
+                        set: { config = config.with(easeInMs: UInt64($0)) }
                     ), in: 100...800, step: 50)
                     Text("\(config.easeInMs)ms")
                         .monospacedDigit()
@@ -503,14 +604,7 @@ struct ZoomConfigPanel: View {
                 LabeledContent("Hold") {
                     Slider(value: Binding(
                         get: { Double(config.holdMs) },
-                        set: { config = ZoomConfig(
-                            scale: config.scale,
-                            easeInMs: config.easeInMs,
-                            holdMs: UInt64($0),
-                            easeOutMs: config.easeOutMs,
-                            mergeThresholdMs: config.mergeThresholdMs,
-                            enabled: config.enabled
-                        )}
+                        set: { config = config.with(holdMs: UInt64($0)) }
                     ), in: 200...2000, step: 100)
                     Text("\(config.holdMs)ms")
                         .monospacedDigit()
@@ -520,14 +614,7 @@ struct ZoomConfigPanel: View {
                 LabeledContent("Ease Out") {
                     Slider(value: Binding(
                         get: { Double(config.easeOutMs) },
-                        set: { config = ZoomConfig(
-                            scale: config.scale,
-                            easeInMs: config.easeInMs,
-                            holdMs: config.holdMs,
-                            easeOutMs: UInt64($0),
-                            mergeThresholdMs: config.mergeThresholdMs,
-                            enabled: config.enabled
-                        )}
+                        set: { config = config.with(easeOutMs: UInt64($0)) }
                     ), in: 100...800, step: 50)
                     Text("\(config.easeOutMs)ms")
                         .monospacedDigit()
@@ -536,14 +623,12 @@ struct ZoomConfigPanel: View {
 
                 Toggle("Enabled", isOn: Binding(
                     get: { config.enabled },
-                    set: { config = ZoomConfig(
-                        scale: config.scale,
-                        easeInMs: config.easeInMs,
-                        holdMs: config.holdMs,
-                        easeOutMs: config.easeOutMs,
-                        mergeThresholdMs: config.mergeThresholdMs,
-                        enabled: $0
-                    )}
+                    set: { config = config.with(enabled: $0) }
+                ))
+
+                Toggle("Follow Cursor", isOn: Binding(
+                    get: { config.followCursor },
+                    set: { config = config.with(followCursor: $0) }
                 ))
             }
 
@@ -558,7 +643,7 @@ struct ZoomConfigPanel: View {
                     LabeledContent("Scale") {
                         Slider(value: Binding(
                             get: { clipManager.zoomClips[index].scale },
-                            set: { clipManager.zoomClips[index].scale = $0 }
+                            set: { clipManager.saveUndoStateDebounced(); clipManager.zoomClips[index].scale = $0 }
                         ), in: 1.0...4.0, step: 0.1)
                         Text(String(format: "%.1fx", clipManager.zoomClips[index].scale))
                             .monospacedDigit()
@@ -568,7 +653,7 @@ struct ZoomConfigPanel: View {
                     LabeledContent("Duration") {
                         Slider(value: Binding(
                             get: { Double(clipManager.zoomClips[index].durationMs) },
-                            set: { clipManager.zoomClips[index].durationMs = UInt64($0) }
+                            set: { clipManager.saveUndoStateDebounced(); clipManager.zoomClips[index].durationMs = UInt64($0) }
                         ), in: 200...5000, step: 100)
                         Text("\(clipManager.zoomClips[index].durationMs)ms")
                             .monospacedDigit()
@@ -579,6 +664,7 @@ struct ZoomConfigPanel: View {
                         Slider(value: Binding(
                             get: { Double(clipManager.zoomClips[index].easeInMs) },
                             set: {
+                                clipManager.saveUndoStateDebounced()
                                 clipManager.zoomClips[index].easeInMs = UInt64($0)
                                 if !clipManager.zoomClips[index].easeEnabled {
                                     clipManager.zoomClips[index].easeEnabled = true
@@ -594,6 +680,7 @@ struct ZoomConfigPanel: View {
                         Slider(value: Binding(
                             get: { Double(clipManager.zoomClips[index].easeOutMs) },
                             set: {
+                                clipManager.saveUndoStateDebounced()
                                 clipManager.zoomClips[index].easeOutMs = UInt64($0)
                                 if !clipManager.zoomClips[index].easeEnabled {
                                     clipManager.zoomClips[index].easeEnabled = true
@@ -608,7 +695,7 @@ struct ZoomConfigPanel: View {
                     LabeledContent("Center X") {
                         Slider(value: Binding(
                             get: { videoWidth > 0 ? clipManager.zoomClips[index].centerX / videoWidth : 0.5 },
-                            set: { clipManager.zoomClips[index].centerX = $0 * videoWidth }
+                            set: { clipManager.saveUndoStateDebounced(); clipManager.zoomClips[index].centerX = $0 * videoWidth }
                         ), in: 0...1, step: 0.01)
                         Text(String(format: "%.0f%%", videoWidth > 0 ? clipManager.zoomClips[index].centerX / videoWidth * 100 : 50))
                             .monospacedDigit()
@@ -618,7 +705,7 @@ struct ZoomConfigPanel: View {
                     LabeledContent("Center Y") {
                         Slider(value: Binding(
                             get: { videoHeight > 0 ? clipManager.zoomClips[index].centerY / videoHeight : 0.5 },
-                            set: { clipManager.zoomClips[index].centerY = $0 * videoHeight }
+                            set: { clipManager.saveUndoStateDebounced(); clipManager.zoomClips[index].centerY = $0 * videoHeight }
                         ), in: 0...1, step: 0.01)
                         Text(String(format: "%.0f%%", videoHeight > 0 ? clipManager.zoomClips[index].centerY / videoHeight * 100 : 50))
                             .monospacedDigit()
@@ -628,5 +715,31 @@ struct ZoomConfigPanel: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+extension ZoomConfig {
+    func with(
+        scale: Double? = nil,
+        easeInMs: UInt64? = nil,
+        holdMs: UInt64? = nil,
+        easeOutMs: UInt64? = nil,
+        mergeThresholdMs: UInt64? = nil,
+        enabled: Bool? = nil,
+        idleTimeoutMs: UInt64? = nil,
+        velocityThreshold: Double? = nil,
+        followCursor: Bool? = nil
+    ) -> ZoomConfig {
+        ZoomConfig(
+            scale: scale ?? self.scale,
+            easeInMs: easeInMs ?? self.easeInMs,
+            holdMs: holdMs ?? self.holdMs,
+            easeOutMs: easeOutMs ?? self.easeOutMs,
+            mergeThresholdMs: mergeThresholdMs ?? self.mergeThresholdMs,
+            enabled: enabled ?? self.enabled,
+            idleTimeoutMs: idleTimeoutMs ?? self.idleTimeoutMs,
+            velocityThreshold: velocityThreshold ?? self.velocityThreshold,
+            followCursor: followCursor ?? self.followCursor
+        )
     }
 }

@@ -17,6 +17,8 @@ struct PreviewView: View {
     let videoHeight: Double
 
     @State private var player: AVPlayer?
+    /// Cache of AVPlayers keyed by URL path, to avoid re-creating players when switching between sources.
+    @State private var playerCache: [String: AVPlayer] = [:]
 
     var body: some View { 
         GeometryReader { geo in
@@ -194,15 +196,52 @@ struct PreviewView: View {
         )
     }
 
-    /// The anchor point for the zoom effect — zooms toward the click position.
+    /// The anchor point for the zoom effect — zooms toward the cursor position.
     private var currentZoomAnchor: UnitPoint {
         let timestampMs = UInt64(max(0, timelinePosition) * 1000)
-        // Look up center from editable zoom clips (not the original keyframes)
+
+        guard videoWidth > 0, videoHeight > 0 else { return .center }
+
+        // Find the active zoom clip to get per-clip ease config
         guard let clip = zoomClips.first(where: {
             timestampMs >= $0.timelineStartMs && timestampMs <= $0.timelineEndMs
-        }), videoWidth > 0, videoHeight > 0 else {
+        }) else {
             return .center
         }
+
+        // Always derive hold from clip duration — global holdMs is only for auto-generation
+        let easeIn = clip.easeEnabled ? clip.easeInMs : zoomConfig.easeInMs
+        let easeOut = clip.easeEnabled ? clip.easeOutMs : zoomConfig.easeOutMs
+        let holdMs = clip.durationMs > (easeIn + easeOut)
+            ? clip.durationMs - easeIn - easeOut
+            : 0
+        let effectiveConfig = zoomConfig.with(
+            easeInMs: easeIn,
+            holdMs: holdMs,
+            easeOutMs: easeOut
+        )
+
+        // Try dynamic cursor-following center
+        if effectiveConfig.followCursor {
+            // Build a keyframe matching this clip's timeline span
+            let kf = [ZoomKeyframe(
+                startMs: clip.timelineStartMs, endMs: clip.timelineEndMs,
+                centerX: clip.centerX, centerY: clip.centerY, scale: clip.scale
+            )]
+            let centerVec = zoomCenterAtFollowing(
+                keyframes: kf,
+                smoothedPath: smoothedPoints,
+                timestampMs: timestampMs,
+                config: effectiveConfig
+            )
+            if centerVec.count == 2 {
+                let anchorX = (centerVec[0] / videoWidth).clamped(to: 0...1)
+                let anchorY = (centerVec[1] / videoHeight).clamped(to: 0...1)
+                return UnitPoint(x: anchorX, y: anchorY)
+            }
+        }
+
+        // Fall back to static center
         let anchorX = (clip.centerX / videoWidth).clamped(to: 0...1)
         let anchorY = (clip.centerY / videoHeight).clamped(to: 0...1)
         return UnitPoint(x: anchorX, y: anchorY)
@@ -218,10 +257,17 @@ struct PreviewView: View {
             player = nil
             return
         }
-        // Player is always paused — playback is driven by timer in EditorView
-        // which sets currentTime, and we seek to show the correct frame.
-        player = AVPlayer(url: url)
-        player?.pause()
+        let key = url.path
+        if let cached = playerCache[key] {
+            if player !== cached {
+                player = cached
+            }
+        } else {
+            let newPlayer = AVPlayer(url: url)
+            newPlayer.pause()
+            playerCache[key] = newPlayer
+            player = newPlayer
+        }
     }
 }
 

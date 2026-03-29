@@ -151,6 +151,24 @@ struct TimelineView: View {
 
             Divider().frame(height: 16)
 
+            // Undo
+            Button(action: { clipManager.undo() }) {
+                Image(systemName: "arrow.uturn.backward")
+            }
+            .buttonStyle(.plain)
+            .disabled(!clipManager.canUndo)
+            .tooltip("Undo (\u{2318}Z)")
+
+            // Redo
+            Button(action: { clipManager.redo() }) {
+                Image(systemName: "arrow.uturn.forward")
+            }
+            .buttonStyle(.plain)
+            .disabled(!clipManager.canRedo)
+            .tooltip("Redo (\u{2318}\u{21E7}Z)")
+
+            Divider().frame(height: 16)
+
             // Scissor mode toggle
             Button(action: { scissorModeActive.toggle() }) {
                 Image(systemName: "scissors")
@@ -317,6 +335,7 @@ struct TimelineView: View {
                     },
                     onResizeLeft: { id, newStart in
                         if let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id }) {
+                            clipManager.saveUndoState()
                             let oldEnd = clipManager.zoomClips[idx].timelineEndMs
                             clipManager.zoomClips[idx].timelineStartMs = min(newStart, oldEnd - 100)
                             clipManager.zoomClips[idx].durationMs = oldEnd - clipManager.zoomClips[idx].timelineStartMs
@@ -324,16 +343,19 @@ struct TimelineView: View {
                     },
                     onResizeRight: { id, newDuration in
                         if let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id }) {
+                            clipManager.saveUndoState()
                             clipManager.zoomClips[idx].durationMs = max(newDuration, 100)
                         }
                     },
                     onResizeEaseIn: { id, newEaseInMs in
                         if let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id }) {
+                            clipManager.saveUndoState()
                             clipManager.zoomClips[idx].easeInMs = newEaseInMs
                         }
                     },
                     onResizeEaseOut: { id, newEaseOutMs in
                         if let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id }) {
+                            clipManager.saveUndoState()
                             clipManager.zoomClips[idx].easeOutMs = newEaseOutMs
                         }
                     },
@@ -457,7 +479,7 @@ struct TimelineView: View {
                             if y >= 60 && y < 84 {
                                 clipManager.splitZoomClip(atTimelineMs: timelineMs)
                             } else if y >= 22 && y < 52 {
-                                if let (sourceMs, _) = clipManager.sourceTimeForTimelinePosition(seconds) {
+                                if let (sourceMs, _, _) = clipManager.sourceTimeForTimelinePosition(seconds) {
                                     clipManager.split(atSourceTimeMs: sourceMs)
                                 }
                             }
@@ -480,7 +502,9 @@ struct TimelineView: View {
                 width: max(width, 4),
                 isSelected: selection.selectedVideoIds.contains(clip.id),
                 isMagneted: magnetedIdsForVideo.contains(clip.id),
-                isHovered: scissorModeActive && hoveredVideoClipId == clip.id && hoveredTrack == .video
+                isHovered: scissorModeActive && hoveredVideoClipId == clip.id && hoveredTrack == .video,
+                sourceName: clipManager.mediaItem(for: clip)?.name,
+                sourceColor: colorForMediaItem(clip.mediaItemId)
             )
             .offset(x: x + (isDragging ? dragOffset : 0), y: 22)
             .opacity(isDragging ? 0.6 : 1.0)
@@ -488,7 +512,7 @@ struct TimelineView: View {
             .zIndex(isDragging ? 10 : 0)
             .onTapGesture {
                 if scissorModeActive, let hoverPos = hoverTimelinePosition {
-                    if let (sourceMs, _) = clipManager.sourceTimeForTimelinePosition(hoverPos) {
+                    if let (sourceMs, _, _) = clipManager.sourceTimeForTimelinePosition(hoverPos) {
                         clipManager.split(atSourceTimeMs: sourceMs)
                     }
                 } else {
@@ -515,9 +539,17 @@ struct TimelineView: View {
         }
     }
 
+    /// Assign a stable color to each media source for visual distinction on the timeline.
+    private func colorForMediaItem(_ mediaItemId: UUID?) -> Color {
+        guard let id = mediaItemId else { return Color.gray }
+        let colors: [Color] = [.blue, .purple, .teal, .indigo, .mint, .cyan, .pink, .orange]
+        guard let index = clipManager.mediaItems.firstIndex(where: { $0.id == id }) else { return .gray }
+        return colors[index % colors.count]
+    }
+
     /// Update currentTime (source time) from the current timelinePosition.
     private func updateCurrentTimeFromTimeline() {
-        if let (sourceMs, _) = clipManager.sourceTimeForTimelinePosition(timelinePosition) {
+        if let (sourceMs, _, _) = clipManager.sourceTimeForTimelinePosition(timelinePosition) {
             currentTime = Double(sourceMs) / 1000.0
         } else {
             currentTime = -1
@@ -749,6 +781,8 @@ struct ClipSegmentView: View {
     let isSelected: Bool
     let isMagneted: Bool
     var isHovered: Bool = false
+    var sourceName: String? = nil
+    var sourceColor: Color = Color.gray.opacity(0.15)
 
     var body: some View {
         ZStack {
@@ -756,11 +790,21 @@ struct ClipSegmentView: View {
                 .fill(fillColor)
             RoundedRectangle(cornerRadius: 4)
                 .strokeBorder(borderColor, lineWidth: (isMagneted || isHovered) ? 2 : 1)
-            if clip.speed != 1.0 {
-                Text(speedLabel)
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(.secondary)
+            VStack(spacing: 1) {
+                if let name = sourceName {
+                    Text(name)
+                        .font(.system(size: 8))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                if clip.speed != 1.0 {
+                    Text(speedLabel)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
             }
+            .padding(.horizontal, 2)
         }
         .frame(width: width, height: 30)
     }
@@ -769,14 +813,14 @@ struct ClipSegmentView: View {
         if isHovered { return Color.orange.opacity(0.2) }
         if isMagneted { return Color.blue.opacity(0.2) }
         if isSelected { return Color.green.opacity(0.25) }
-        return Color.gray.opacity(0.15)
+        return sourceColor.opacity(0.2)
     }
 
     private var borderColor: Color {
         if isHovered { return Color.orange }
         if isMagneted { return Color.blue }
         if isSelected { return Color.green }
-        return Color.gray.opacity(0.4)
+        return sourceColor.opacity(0.6)
     }
 
     private var speedLabel: String {
