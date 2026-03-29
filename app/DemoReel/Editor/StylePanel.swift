@@ -4,17 +4,39 @@ import SwiftUI
 struct StylePanel: View {
     @Binding var config: StyleConfig
 
-    private let gradientPresets: [(String, String, String, Double)] = [
-        ("Indigo → Purple", "#667eea", "#764ba2", 135),
-        ("Cyan → Blue", "#0891b2", "#1d4ed8", 135),
-        ("Rose → Orange", "#f43f5e", "#f97316", 135),
-        ("Green → Teal", "#22c55e", "#14b8a6", 135),
-        ("Slate", "#334155", "#1e293b", 180),
+    private let gradientPresets: [(String, String, String, Double, String)] = [
+        // Ocean
+        ("Deep Sea", "#0c2340", "#1e90ff", 180, "Ocean"),
+        ("Arctic", "#9FE0F5", "#528CA2", 135, "Ocean"),
+        ("Midnight", "#12376C", "#0891b2", 135, "Ocean"),
+        ("Glacier", "#74b9ff", "#0984e3", 180, "Ocean"),
+        // Sunset
+        ("Golden Hour", "#FFBD44", "#FF605C", 135, "Sunset"),
+        ("Peach Glow", "#EBB0CD", "#E97B8A", 135, "Sunset"),
+        ("Ember", "#f43f5e", "#f97316", 135, "Sunset"),
+        ("Sunrise", "#ff6b6b", "#feca57", 135, "Sunset"),
+        // Nature
+        ("Forest", "#00b894", "#00CA4E", 135, "Nature"),
+        ("Emerald", "#22c55e", "#14b8a6", 135, "Nature"),
+        ("Moss", "#2d6a4f", "#52b788", 180, "Nature"),
+        // Purple
+        ("Indigo Night", "#667eea", "#764ba2", 135, "Purple"),
+        ("Monterey", "#743E84", "#2d3436", 180, "Purple"),
+        ("Lavender", "#a29bfe", "#6c5ce7", 135, "Purple"),
+        ("Berry", "#e84393", "#6c5ce7", 135, "Purple"),
+        // Minimal
+        ("Slate", "#334155", "#1e293b", 180, "Minimal"),
+        ("Charcoal", "#2d3436", "#636e72", 180, "Minimal"),
+        ("Obsidian", "#0f172a", "#1e293b", 180, "Minimal"),
     ]
+
+    private let gradientCategories = ["Ocean", "Sunset", "Nature", "Purple", "Minimal"]
 
     private let solidPresets: [String] = [
         "#1a1a2e", "#0f172a", "#1e1b4b", "#1c1917",
+        "#0f0f23", "#2d1b69",
         "#ffffff", "#f8fafc", "#fef3c7", "#ecfdf5",
+        "#fdf2f8", "#f0fdf4",
     ]
 
     var body: some View {
@@ -23,6 +45,7 @@ struct StylePanel: View {
                 Picker("Type", selection: bgTypeBinding) {
                     Text("Solid").tag("solid")
                     Text("Gradient").tag("gradient")
+                    Text("Image").tag("image")
                     Text("Transparent").tag("transparent")
                 }
                 .pickerStyle(.segmented)
@@ -39,16 +62,16 @@ struct StylePanel: View {
                                     Circle().strokeBorder(.primary.opacity(0.2), lineWidth: 1)
                                 )
                                 .onTapGesture {
-                                    var bg = config.background
-                                    bg = BackgroundConfig(
-                                        bgType: "solid",
-                                        hex: hex,
-                                        gradientFromHex: bg.gradientFromHex,
-                                        gradientToHex: bg.gradientToHex,
-                                        gradientAngleDegrees: bg.gradientAngleDegrees
-                                    )
+                                    let bg = config.background
                                     config = StyleConfig(
-                                        background: bg,
+                                        background: BackgroundConfig(
+                                            bgType: "solid",
+                                            hex: hex,
+                                            gradientFromHex: bg.gradientFromHex,
+                                            gradientToHex: bg.gradientToHex,
+                                            gradientAngleDegrees: bg.gradientAngleDegrees,
+                                            imageName: bg.imageName
+                                        ),
                                         padding: config.padding,
                                         cornerRadius: config.cornerRadius,
                                         shadowEnabled: config.shadowEnabled,
@@ -75,32 +98,85 @@ struct StylePanel: View {
                             .frame(width: 30)
                     }
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(Array(gradientPresets.enumerated()), id: \.offset) { _, preset in
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(LinearGradient(
-                                        colors: [Color(hex: preset.1), Color(hex: preset.2)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ))
-                                    .frame(width: 44, height: 28)
-                                    .onTapGesture {
-                                        config = StyleConfig(
-                                            background: BackgroundConfig(
-                                                bgType: "gradient",
-                                                hex: config.background.hex,
-                                                gradientFromHex: preset.1,
-                                                gradientToHex: preset.2,
-                                                gradientAngleDegrees: preset.3
-                                            ),
-                                            padding: config.padding,
-                                            cornerRadius: config.cornerRadius,
-                                            shadowEnabled: config.shadowEnabled,
-                                            shadowIntensity: config.shadowIntensity,
-                                            aspectRatio: config.aspectRatio
+                    ForEach(gradientCategories, id: \.self) { category in
+                        let presets = gradientPresets.filter { $0.4 == category }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(category)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 44))], spacing: 6) {
+                                ForEach(Array(presets.enumerated()), id: \.offset) { _, preset in
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(LinearGradient(
+                                            colors: [Color(hex: preset.1), Color(hex: preset.2)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ))
+                                        .frame(height: 28)
+                                        .onTapGesture {
+                                            config = StyleConfig(
+                                                background: BackgroundConfig(
+                                                    bgType: "gradient",
+                                                    hex: config.background.hex,
+                                                    gradientFromHex: preset.1,
+                                                    gradientToHex: preset.2,
+                                                    gradientAngleDegrees: preset.3,
+                                                    imageName: config.background.imageName
+                                                ),
+                                                padding: config.padding,
+                                                cornerRadius: config.cornerRadius,
+                                                shadowEnabled: config.shadowEnabled,
+                                                shadowIntensity: config.shadowIntensity,
+                                                aspectRatio: config.aspectRatio
+                                            )
+                                        }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if config.background.bgType == "image" {
+                    ForEach(wallpaperCategories, id: \.self) { category in
+                        let items = wallpaperCatalog.filter { $0.category == category }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(category)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 72))], spacing: 6) {
+                                ForEach(items) { wallpaper in
+                                    Image(wallpaper.id)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 72, height: 44)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .strokeBorder(
+                                                    config.background.imageName == wallpaper.id
+                                                        ? Color.accentColor
+                                                        : Color.primary.opacity(0.15),
+                                                    lineWidth: config.background.imageName == wallpaper.id ? 2 : 1
+                                                )
                                         )
-                                    }
+                                        .onTapGesture {
+                                            config = StyleConfig(
+                                                background: BackgroundConfig(
+                                                    bgType: "image",
+                                                    hex: config.background.hex,
+                                                    gradientFromHex: config.background.gradientFromHex,
+                                                    gradientToHex: config.background.gradientToHex,
+                                                    gradientAngleDegrees: config.background.gradientAngleDegrees,
+                                                    imageName: wallpaper.id
+                                                ),
+                                                padding: config.padding,
+                                                cornerRadius: config.cornerRadius,
+                                                shadowEnabled: config.shadowEnabled,
+                                                shadowIntensity: config.shadowIntensity,
+                                                aspectRatio: config.aspectRatio
+                                            )
+                                        }
+                                }
                             }
                         }
                     }
@@ -162,7 +238,8 @@ struct StylePanel: View {
                         hex: config.background.hex,
                         gradientFromHex: config.background.gradientFromHex,
                         gradientToHex: config.background.gradientToHex,
-                        gradientAngleDegrees: config.background.gradientAngleDegrees
+                        gradientAngleDegrees: config.background.gradientAngleDegrees,
+                        imageName: config.background.imageName
                     ),
                     padding: config.padding,
                     cornerRadius: config.cornerRadius,
@@ -205,7 +282,8 @@ struct StylePanel: View {
                         hex: config.background.hex,
                         gradientFromHex: config.background.gradientFromHex,
                         gradientToHex: config.background.gradientToHex,
-                        gradientAngleDegrees: newAngle
+                        gradientAngleDegrees: newAngle,
+                        imageName: config.background.imageName
                     ),
                     padding: config.padding,
                     cornerRadius: config.cornerRadius,

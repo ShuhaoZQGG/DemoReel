@@ -367,6 +367,16 @@ private struct ExportFrameView: View {
                     startPoint: gradientStart,
                     endPoint: gradientEnd
                 )
+            case "image":
+                if let nsImage = NSImage(named: styleConfig.background.imageName) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: outputSize.width, height: outputSize.height)
+                        .clipped()
+                } else {
+                    Color(hex: "#1a1a2e")
+                }
             case "transparent":
                 Color.white
             default:

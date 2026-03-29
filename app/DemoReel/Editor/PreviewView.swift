@@ -84,6 +84,16 @@ struct PreviewView: View {
                 startPoint: gradientStart,
                 endPoint: gradientEnd
             )
+        case "image":
+            if let nsImage = NSImage(named: styleConfig.background.imageName) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            } else {
+                Color(hex: "#1a1a2e")
+            }
         case "transparent":
             // Checkerboard pattern to indicate transparency
             Canvas { context, size in
@@ -187,13 +197,14 @@ struct PreviewView: View {
     /// The anchor point for the zoom effect — zooms toward the click position.
     private var currentZoomAnchor: UnitPoint {
         let timestampMs = UInt64(max(0, timelinePosition) * 1000)
-        let center = zoomCenterAt(keyframes: keyframes, timestampMs: timestampMs)
-        guard center.count == 2, videoWidth > 0, videoHeight > 0 else {
+        // Look up center from editable zoom clips (not the original keyframes)
+        guard let clip = zoomClips.first(where: {
+            timestampMs >= $0.timelineStartMs && timestampMs <= $0.timelineEndMs
+        }), videoWidth > 0, videoHeight > 0 else {
             return .center
         }
-        // Normalize click position to 0..1 range within the video frame
-        let anchorX = (center[0] / videoWidth).clamped(to: 0...1)
-        let anchorY = (center[1] / videoHeight).clamped(to: 0...1)
+        let anchorX = (clip.centerX / videoWidth).clamped(to: 0...1)
+        let anchorY = (clip.centerY / videoHeight).clamped(to: 0...1)
         return UnitPoint(x: anchorX, y: anchorY)
     }
 

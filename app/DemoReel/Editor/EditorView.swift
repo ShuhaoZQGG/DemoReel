@@ -22,6 +22,7 @@ struct EditorView: View {
     @State private var zoomPlacementActive = false
     @State private var selection: TrackSelection = .none
     @State private var keyMonitor = KeyboardShortcutMonitor()
+    @State private var restorableZoomCount: Int = 0
 
     enum SidebarTab: String, CaseIterable {
         case zoom = "Zoom"
@@ -85,7 +86,12 @@ struct EditorView: View {
                 case .zoom:
                     ZoomConfigPanel(
                         config: $zoomConfig,
-                        onRegenerate: regenerateKeyframes
+                        restorableCount: restorableZoomCount,
+                        onRegenerate: regenerateKeyframes,
+                        selection: selection,
+                        clipManager: clipManager,
+                        videoWidth: videoWidth,
+                        videoHeight: videoHeight
                     )
                 case .style:
                     StylePanel(config: $styleConfig)
@@ -143,6 +149,9 @@ struct EditorView: View {
                 stopPlaybackTimer()
             }
         }
+        .onChange(of: clipManager.zoomClips.count) {
+            updateRestorableZoomCount()
+        }
         .onDisappear {
             stopPlaybackTimer()
         }
@@ -184,6 +193,7 @@ struct EditorView: View {
 
         // Initialize zoom clips from auto-generated keyframes
         clipManager.initializeZoomClips(from: generatedKeyframes)
+        updateRestorableZoomCount()
     }
 
     private func splitAtPlayhead() {
@@ -204,9 +214,10 @@ struct EditorView: View {
     }
 
     private func placeZoomClip(atTimelineMs ms: UInt64) {
+        let durationMs = zoomConfig.easeInMs + zoomConfig.holdMs + zoomConfig.easeOutMs
         clipManager.addZoomClip(
             atTimelineMs: ms,
-            durationMs: 1000,
+            durationMs: durationMs,
             centerX: 0.5,
             centerY: 0.5,
             scale: zoomConfig.scale
@@ -215,9 +226,10 @@ struct EditorView: View {
 
     private func addZoomAtPlayhead() {
         let timelineMs = UInt64(timelinePosition * 1000)
+        let durationMs = zoomConfig.easeInMs + zoomConfig.holdMs + zoomConfig.easeOutMs
         clipManager.addZoomClip(
             atTimelineMs: timelineMs,
-            durationMs: 1000,
+            durationMs: durationMs,
             centerX: 0.5,
             centerY: 0.5,
             scale: zoomConfig.scale
@@ -296,6 +308,20 @@ struct EditorView: View {
         )
         // Additive: only add non-overlapping new zoom clips, preserving manual edits
         clipManager.regenerateZoomClips(from: generatedKeyframes)
+        updateRestorableZoomCount()
+    }
+
+    private func updateRestorableZoomCount() {
+        guard let eventsPath = appState.eventsPath else { restorableZoomCount = 0; return }
+        guard let json = try? String(contentsOf: eventsPath, encoding: .utf8) else { restorableZoomCount = 0; return }
+        guard let mouseEvents = try? mouseEventsFromLog(json: json) else { restorableZoomCount = 0; return }
+
+        let keyframes = generateZoomKeyframesWithConfig(events: mouseEvents, config: zoomConfig)
+        restorableZoomCount = keyframes.filter { kf in
+            !clipManager.zoomClips.contains { zc in
+                kf.startMs < zc.timelineEndMs && kf.endMs > zc.timelineStartMs
+            }
+        }.count
     }
 
     private func loadProjectSettingsIfNeeded() {
@@ -316,7 +342,8 @@ struct EditorView: View {
                 hex: project.bgHex,
                 gradientFromHex: project.bgGradientFromHex,
                 gradientToHex: project.bgGradientToHex,
-                gradientAngleDegrees: project.bgGradientAngle
+                gradientAngleDegrees: project.bgGradientAngle,
+                imageName: project.bgImageName
             ),
             padding: project.padding,
             cornerRadius: project.cornerRadius,
@@ -366,6 +393,7 @@ struct EditorView: View {
             bgGradientFromHex: styleConfig.background.gradientFromHex,
             bgGradientToHex: styleConfig.background.gradientToHex,
             bgGradientAngle: styleConfig.background.gradientAngleDegrees,
+            bgImageName: styleConfig.background.imageName,
             padding: styleConfig.padding,
             cornerRadius: styleConfig.cornerRadius,
             shadowEnabled: styleConfig.shadowEnabled,
@@ -422,7 +450,18 @@ struct EditorView: View {
 /// Sidebar panel for adjusting zoom configuration.
 struct ZoomConfigPanel: View {
     @Binding var config: ZoomConfig
+    var restorableCount: Int
     var onRegenerate: () -> Void
+    var selection: TrackSelection
+    var clipManager: ClipManager
+    var videoWidth: Double
+    var videoHeight: Double
+
+    private var selectedClipIndex: Int? {
+        guard case .zoomClips(let ids) = selection, ids.count == 1,
+              let id = ids.first else { return nil }
+        return clipManager.zoomClips.firstIndex { $0.id == id }
+    }
 
     var body: some View {
         Form {
@@ -508,10 +547,85 @@ struct ZoomConfigPanel: View {
                 ))
             }
 
-            Button("Regenerate Keyframes") {
+            Button("Restore Zoom Clips") {
                 onRegenerate()
             }
             .buttonStyle(.borderedProminent)
+            .disabled(restorableCount == 0)
+
+            if let index = selectedClipIndex {
+                Section("Selected Clip") {
+                    LabeledContent("Scale") {
+                        Slider(value: Binding(
+                            get: { clipManager.zoomClips[index].scale },
+                            set: { clipManager.zoomClips[index].scale = $0 }
+                        ), in: 1.0...4.0, step: 0.1)
+                        Text(String(format: "%.1fx", clipManager.zoomClips[index].scale))
+                            .monospacedDigit()
+                            .frame(width: 40)
+                    }
+
+                    LabeledContent("Duration") {
+                        Slider(value: Binding(
+                            get: { Double(clipManager.zoomClips[index].durationMs) },
+                            set: { clipManager.zoomClips[index].durationMs = UInt64($0) }
+                        ), in: 200...5000, step: 100)
+                        Text("\(clipManager.zoomClips[index].durationMs)ms")
+                            .monospacedDigit()
+                            .frame(width: 55)
+                    }
+
+                    LabeledContent("Ease In") {
+                        Slider(value: Binding(
+                            get: { Double(clipManager.zoomClips[index].easeInMs) },
+                            set: {
+                                clipManager.zoomClips[index].easeInMs = UInt64($0)
+                                if !clipManager.zoomClips[index].easeEnabled {
+                                    clipManager.zoomClips[index].easeEnabled = true
+                                }
+                            }
+                        ), in: 0...800, step: 50)
+                        Text("\(clipManager.zoomClips[index].easeInMs)ms")
+                            .monospacedDigit()
+                            .frame(width: 55)
+                    }
+
+                    LabeledContent("Ease Out") {
+                        Slider(value: Binding(
+                            get: { Double(clipManager.zoomClips[index].easeOutMs) },
+                            set: {
+                                clipManager.zoomClips[index].easeOutMs = UInt64($0)
+                                if !clipManager.zoomClips[index].easeEnabled {
+                                    clipManager.zoomClips[index].easeEnabled = true
+                                }
+                            }
+                        ), in: 0...800, step: 50)
+                        Text("\(clipManager.zoomClips[index].easeOutMs)ms")
+                            .monospacedDigit()
+                            .frame(width: 55)
+                    }
+
+                    LabeledContent("Center X") {
+                        Slider(value: Binding(
+                            get: { videoWidth > 0 ? clipManager.zoomClips[index].centerX / videoWidth : 0.5 },
+                            set: { clipManager.zoomClips[index].centerX = $0 * videoWidth }
+                        ), in: 0...1, step: 0.01)
+                        Text(String(format: "%.0f%%", videoWidth > 0 ? clipManager.zoomClips[index].centerX / videoWidth * 100 : 50))
+                            .monospacedDigit()
+                            .frame(width: 40)
+                    }
+
+                    LabeledContent("Center Y") {
+                        Slider(value: Binding(
+                            get: { videoHeight > 0 ? clipManager.zoomClips[index].centerY / videoHeight : 0.5 },
+                            set: { clipManager.zoomClips[index].centerY = $0 * videoHeight }
+                        ), in: 0...1, step: 0.01)
+                        Text(String(format: "%.0f%%", videoHeight > 0 ? clipManager.zoomClips[index].centerY / videoHeight * 100 : 50))
+                            .monospacedDigit()
+                            .frame(width: 40)
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
     }
