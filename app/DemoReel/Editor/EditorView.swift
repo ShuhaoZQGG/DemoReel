@@ -572,10 +572,33 @@ struct ZoomConfigPanel: View {
     var videoWidth: Double
     var videoHeight: Double
 
-    private var selectedClipIndex: Int? {
-        guard case .zoomClips(let ids) = selection, ids.count == 1,
-              let id = ids.first else { return nil }
-        return clipManager.zoomClips.firstIndex { $0.id == id }
+    private var selectedClipID: UUID? {
+        guard case .zoomClips(let ids) = selection, ids.count == 1 else { return nil }
+        return ids.first
+    }
+
+    private var selectedClip: ZoomClip? {
+        guard let id = selectedClipID else { return nil }
+        return clipManager.zoomClips.first { $0.id == id }
+    }
+
+    /// Create a Binding that looks up the zoom clip by ID each time, preventing stale-index crashes.
+    private func clipBinding<T>(default defaultValue: T, get: @escaping (Int) -> T, set: @escaping (Int, T) -> Void) -> Binding<T> {
+        Binding(
+            get: {
+                guard let id = selectedClipID,
+                      let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id })
+                else { return defaultValue }
+                return get(idx)
+            },
+            set: { newValue in
+                guard let id = selectedClipID,
+                      let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id })
+                else { return }
+                clipManager.saveUndoStateDebounced()
+                set(idx, newValue)
+            }
+        )
     }
 
     var body: some View {
@@ -638,76 +661,74 @@ struct ZoomConfigPanel: View {
             .buttonStyle(.borderedProminent)
             .disabled(restorableCount == 0)
 
-            if let index = selectedClipIndex {
+            if let clip = selectedClip {
                 Section("Selected Clip") {
                     LabeledContent("Scale") {
-                        Slider(value: Binding(
-                            get: { clipManager.zoomClips[index].scale },
-                            set: { clipManager.saveUndoStateDebounced(); clipManager.zoomClips[index].scale = $0 }
+                        Slider(value: clipBinding(default: 1.0,
+                            get: { clipManager.zoomClips[$0].scale },
+                            set: { clipManager.zoomClips[$0].scale = $1 }
                         ), in: 1.0...4.0, step: 0.1)
-                        Text(String(format: "%.1fx", clipManager.zoomClips[index].scale))
+                        Text(String(format: "%.1fx", clip.scale))
                             .monospacedDigit()
                             .frame(width: 40)
                     }
 
                     LabeledContent("Duration") {
-                        Slider(value: Binding(
-                            get: { Double(clipManager.zoomClips[index].durationMs) },
-                            set: { clipManager.saveUndoStateDebounced(); clipManager.zoomClips[index].durationMs = UInt64($0) }
+                        Slider(value: clipBinding(default: 1000.0,
+                            get: { Double(clipManager.zoomClips[$0].durationMs) },
+                            set: { clipManager.zoomClips[$0].durationMs = UInt64($1) }
                         ), in: 200...5000, step: 100)
-                        Text("\(clipManager.zoomClips[index].durationMs)ms")
+                        Text("\(clip.durationMs)ms")
                             .monospacedDigit()
                             .frame(width: 55)
                     }
 
                     LabeledContent("Ease In") {
-                        Slider(value: Binding(
-                            get: { Double(clipManager.zoomClips[index].easeInMs) },
-                            set: {
-                                clipManager.saveUndoStateDebounced()
-                                clipManager.zoomClips[index].easeInMs = UInt64($0)
-                                if !clipManager.zoomClips[index].easeEnabled {
-                                    clipManager.zoomClips[index].easeEnabled = true
+                        Slider(value: clipBinding(default: 0.0,
+                            get: { Double(clipManager.zoomClips[$0].easeInMs) },
+                            set: { idx, val in
+                                clipManager.zoomClips[idx].easeInMs = UInt64(val)
+                                if !clipManager.zoomClips[idx].easeEnabled {
+                                    clipManager.zoomClips[idx].easeEnabled = true
                                 }
                             }
                         ), in: 0...800, step: 50)
-                        Text("\(clipManager.zoomClips[index].easeInMs)ms")
+                        Text("\(clip.easeInMs)ms")
                             .monospacedDigit()
                             .frame(width: 55)
                     }
 
                     LabeledContent("Ease Out") {
-                        Slider(value: Binding(
-                            get: { Double(clipManager.zoomClips[index].easeOutMs) },
-                            set: {
-                                clipManager.saveUndoStateDebounced()
-                                clipManager.zoomClips[index].easeOutMs = UInt64($0)
-                                if !clipManager.zoomClips[index].easeEnabled {
-                                    clipManager.zoomClips[index].easeEnabled = true
+                        Slider(value: clipBinding(default: 0.0,
+                            get: { Double(clipManager.zoomClips[$0].easeOutMs) },
+                            set: { idx, val in
+                                clipManager.zoomClips[idx].easeOutMs = UInt64(val)
+                                if !clipManager.zoomClips[idx].easeEnabled {
+                                    clipManager.zoomClips[idx].easeEnabled = true
                                 }
                             }
                         ), in: 0...800, step: 50)
-                        Text("\(clipManager.zoomClips[index].easeOutMs)ms")
+                        Text("\(clip.easeOutMs)ms")
                             .monospacedDigit()
                             .frame(width: 55)
                     }
 
                     LabeledContent("Center X") {
-                        Slider(value: Binding(
-                            get: { videoWidth > 0 ? clipManager.zoomClips[index].centerX / videoWidth : 0.5 },
-                            set: { clipManager.saveUndoStateDebounced(); clipManager.zoomClips[index].centerX = $0 * videoWidth }
+                        Slider(value: clipBinding(default: 0.5,
+                            get: { videoWidth > 0 ? clipManager.zoomClips[$0].centerX / videoWidth : 0.5 },
+                            set: { clipManager.zoomClips[$0].centerX = $1 * videoWidth }
                         ), in: 0...1, step: 0.01)
-                        Text(String(format: "%.0f%%", videoWidth > 0 ? clipManager.zoomClips[index].centerX / videoWidth * 100 : 50))
+                        Text(String(format: "%.0f%%", videoWidth > 0 ? clip.centerX / videoWidth * 100 : 50))
                             .monospacedDigit()
                             .frame(width: 40)
                     }
 
                     LabeledContent("Center Y") {
-                        Slider(value: Binding(
-                            get: { videoHeight > 0 ? clipManager.zoomClips[index].centerY / videoHeight : 0.5 },
-                            set: { clipManager.saveUndoStateDebounced(); clipManager.zoomClips[index].centerY = $0 * videoHeight }
+                        Slider(value: clipBinding(default: 0.5,
+                            get: { videoHeight > 0 ? clipManager.zoomClips[$0].centerY / videoHeight : 0.5 },
+                            set: { clipManager.zoomClips[$0].centerY = $1 * videoHeight }
                         ), in: 0...1, step: 0.01)
-                        Text(String(format: "%.0f%%", videoHeight > 0 ? clipManager.zoomClips[index].centerY / videoHeight * 100 : 50))
+                        Text(String(format: "%.0f%%", videoHeight > 0 ? clip.centerY / videoHeight * 100 : 50))
                             .monospacedDigit()
                             .frame(width: 40)
                     }
