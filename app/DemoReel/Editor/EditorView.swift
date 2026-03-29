@@ -736,24 +736,44 @@ struct ZoomConfigPanel: View {
                             .frame(width: 55)
                     }
 
-                    LabeledContent("Center X") {
+                    LabeledContent {
                         Slider(value: clipBinding(default: 0.5,
                             get: { videoWidth > 0 ? clipManager.zoomClips[$0].centerX / videoWidth : 0.5 },
                             set: { clipManager.zoomClips[$0].centerX = $1 * videoWidth }
                         ), in: 0...1, step: 0.01)
+                        .disabled(config.followCursor)
                         Text(String(format: "%.0f%%", videoWidth > 0 ? clip.centerX / videoWidth * 100 : 50))
                             .monospacedDigit()
                             .frame(width: 40)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("Center X")
+                            if config.followCursor {
+                                Image(systemName: "info.circle")
+                                    .foregroundStyle(.secondary)
+                                    .tooltip("Disabled while Follow Cursor is on — the zoom center tracks the cursor automatically")
+                            }
+                        }
                     }
 
-                    LabeledContent("Center Y") {
+                    LabeledContent {
                         Slider(value: clipBinding(default: 0.5,
                             get: { videoHeight > 0 ? clipManager.zoomClips[$0].centerY / videoHeight : 0.5 },
                             set: { clipManager.zoomClips[$0].centerY = $1 * videoHeight }
                         ), in: 0...1, step: 0.01)
+                        .disabled(config.followCursor)
                         Text(String(format: "%.0f%%", videoHeight > 0 ? clip.centerY / videoHeight * 100 : 50))
                             .monospacedDigit()
                             .frame(width: 40)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("Center Y")
+                            if config.followCursor {
+                                Image(systemName: "info.circle")
+                                    .foregroundStyle(.secondary)
+                                    .tooltip("Disabled while Follow Cursor is on — the zoom center tracks the cursor automatically")
+                            }
+                        }
                     }
                 }
             }
