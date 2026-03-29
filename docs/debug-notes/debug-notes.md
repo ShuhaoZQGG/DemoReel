@@ -36,3 +36,6 @@ Each note is in its own file under `debug-notes/`.
 ## Zoom & Easing
 - [19 — Per-Clip Ease-In/Out — Stored But Not Applied](docs/debug-notes/19-per-clip-ease-not-applied.md)
 
+## Timeline Thumbnails
+- [21 — ThumbnailCache — @Observable Infinite Re-render Loop](docs/debug-notes/21-thumbnail-cache-infinite-rerender.md)
+
