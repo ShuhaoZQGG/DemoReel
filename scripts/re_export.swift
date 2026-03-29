@@ -40,10 +40,14 @@ struct ZoomConfig {
     let easeOutMs: UInt64
     let mergeThresholdMs: UInt64
     let enabled: Bool
+    let idleTimeoutMs: UInt64
+    let velocityThreshold: Double
+    let followCursor: Bool
 
     static let `default` = ZoomConfig(
         scale: 2.0, easeInMs: 300, holdMs: 600, easeOutMs: 400,
-        mergeThresholdMs: 300, enabled: true
+        mergeThresholdMs: 300, enabled: true,
+        idleTimeoutMs: 1500, velocityThreshold: 50.0, followCursor: true
     )
 }
 
@@ -103,33 +107,49 @@ func smoothCursorPath(positions: [MouseEvent], alpha: Double) -> [SmoothedPoint]
 
 func generateZoomKeyframes(events: [MouseEvent], config: ZoomConfig) -> [ZoomKeyframe] {
     guard config.enabled else { return [] }
-    let clicks = events.filter { $0.click }
-    guard !clicks.isEmpty else { return [] }
 
-    // Cluster nearby clicks
-    struct Cluster { var cx: Double; var cy: Double; var ts: UInt64; var count: Int }
-    var clusters: [Cluster] = []
-    for click in clicks {
-        if var last = clusters.last,
-           click.timestampMs >= last.ts,
-           click.timestampMs - last.ts <= config.mergeThresholdMs {
-            let total = Double(last.count + 1)
-            last.cx = (last.cx * Double(last.count) + click.x) / total
-            last.cy = (last.cy * Double(last.count) + click.y) / total
-            last.ts = max(last.ts, click.timestampMs)
-            last.count += 1
-            clusters[clusters.count - 1] = last
-        } else {
-            clusters.append(Cluster(cx: click.x, cy: click.y, ts: click.timestampMs, count: 1))
+    // Session-based detection: click starts, movement extends, idle ends
+    struct Session { var firstClickMs: UInt64; var clickX: Double; var clickY: Double; var lastActiveMs: UInt64 }
+    var sessions: [Session] = []
+    var current: Session?
+    var prevEvent: MouseEvent?
+
+    for event in events {
+        // Check idle timeout before processing
+        if let s = current, event.timestampMs > s.lastActiveMs + config.idleTimeoutMs {
+            sessions.append(s)
+            current = nil
         }
-    }
 
-    // Generate keyframes
-    let totalDur = config.easeInMs + config.holdMs + config.easeOutMs
-    var keyframes: [ZoomKeyframe] = clusters.map { c in
-        let start = c.ts >= config.easeInMs ? c.ts - config.easeInMs : 0
-        return ZoomKeyframe(startMs: start, endMs: start + totalDur,
-                            centerX: c.cx, centerY: c.cy, scale: config.scale)
+        if event.click {
+            if current != nil {
+                current!.lastActiveMs = event.timestampMs
+            } else {
+                current = Session(firstClickMs: event.timestampMs, clickX: event.x, clickY: event.y, lastActiveMs: event.timestampMs)
+            }
+        } else if current != nil, let prev = prevEvent {
+            let dt = event.timestampMs > prev.timestampMs ? event.timestampMs - prev.timestampMs : 0
+            if dt > 0 {
+                let dx = event.x - prev.x, dy = event.y - prev.y
+                let velocity = sqrt(dx * dx + dy * dy) / (Double(dt) / 1000.0)
+                if velocity > config.velocityThreshold {
+                    current!.lastActiveMs = event.timestampMs
+                }
+            }
+        }
+        prevEvent = event
+    }
+    if let s = current { sessions.append(s) }
+
+    guard !sessions.isEmpty else { return [] }
+
+    // Convert sessions to keyframes
+    var keyframes: [ZoomKeyframe] = sessions.map { s in
+        let startMs = s.firstClickMs >= config.easeInMs ? s.firstClickMs - config.easeInMs : 0
+        let sessionHold = s.lastActiveMs >= s.firstClickMs ? s.lastActiveMs - s.firstClickMs : 0
+        let hold = max(sessionHold, config.holdMs)
+        let totalDur = config.easeInMs + hold + config.easeOutMs
+        return ZoomKeyframe(startMs: startMs, endMs: startMs + totalDur, centerX: s.clickX, centerY: s.clickY, scale: config.scale)
     }
 
     // Merge overlapping
@@ -175,6 +195,42 @@ func zoomCenterAt(keyframes: [ZoomKeyframe], timestampMs: UInt64) -> (Double, Do
     for kf in keyframes {
         if timestampMs >= kf.startMs && timestampMs <= kf.endMs {
             return (kf.centerX, kf.centerY)
+        }
+    }
+    return nil
+}
+
+func findCursorAt(path: [SmoothedPoint], timestampMs: UInt64) -> (Double, Double) {
+    guard !path.isEmpty else { return (0, 0) }
+    // Binary search for last point <= timestamp
+    var lo = 0, hi = path.count - 1
+    while lo < hi {
+        let mid = (lo + hi + 1) / 2
+        if path[mid].timestampMs <= timestampMs { lo = mid } else { hi = mid - 1 }
+    }
+    return (path[lo].x, path[lo].y)
+}
+
+func zoomCenterAtFollowing(keyframes: [ZoomKeyframe], smoothedPath: [SmoothedPoint], timestampMs: UInt64, config: ZoomConfig) -> (Double, Double)? {
+    guard config.followCursor, !smoothedPath.isEmpty else {
+        return zoomCenterAt(keyframes: keyframes, timestampMs: timestampMs)
+    }
+    for kf in keyframes {
+        guard timestampMs >= kf.startMs && timestampMs <= kf.endMs else { continue }
+        let elapsed = timestampMs - kf.startMs
+        let total = kf.endMs - kf.startMs
+
+        if elapsed <= config.easeInMs {
+            let cursor = findCursorAt(path: smoothedPath, timestampMs: timestampMs)
+            let t = config.easeInMs > 0 ? cubicEaseInOut(Double(elapsed) / Double(config.easeInMs)) : 1.0
+            return (kf.centerX + (cursor.0 - kf.centerX) * t, kf.centerY + (cursor.1 - kf.centerY) * t)
+        } else if elapsed <= total - config.easeOutMs {
+            let cursor = findCursorAt(path: smoothedPath, timestampMs: timestampMs)
+            return cursor
+        } else {
+            let easeOutStartMs = kf.startMs + total - config.easeOutMs
+            let cursor = findCursorAt(path: smoothedPath, timestampMs: easeOutStartMs)
+            return cursor
         }
     }
     return nil
@@ -470,7 +526,7 @@ func main() {
 
             // Compute zoom
             let scale = zoomScaleAt(keyframes: keyframes, timestampMs: timestampMs, config: zoomConfig)
-            let center = zoomCenterAt(keyframes: keyframes, timestampMs: timestampMs)
+            let center = zoomCenterAtFollowing(keyframes: keyframes, smoothedPath: smoothedPts, timestampMs: timestampMs, config: zoomConfig)
             let anchorX: Double, anchorY: Double
             if let c = center, screenW > 0, screenH > 0 {
                 anchorX = min(max(c.0 / screenW, 0), 1)

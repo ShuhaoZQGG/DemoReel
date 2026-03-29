@@ -1,32 +1,14 @@
-use crate::types::{MouseEvent, ZoomConfig, ZoomKeyframe};
+use crate::types::{MouseEvent, SmoothedPoint, ZoomConfig, ZoomKeyframe};
 
-/// A cluster of nearby clicks that will become a single zoom keyframe.
-struct ClickCluster {
-    centroid_x: f64,
-    centroid_y: f64,
-    timestamp_ms: u64,
-    count: usize,
-}
-
-impl ClickCluster {
-    fn from_event(event: &MouseEvent) -> Self {
-        ClickCluster {
-            centroid_x: event.x,
-            centroid_y: event.y,
-            timestamp_ms: event.timestamp_ms,
-            count: 1,
-        }
-    }
-
-    fn merge(&mut self, event: &MouseEvent) {
-        let total = self.count as f64 + 1.0;
-        self.centroid_x =
-            (self.centroid_x * self.count as f64 + event.x) / total;
-        self.centroid_y =
-            (self.centroid_y * self.count as f64 + event.y) / total;
-        self.timestamp_ms = self.timestamp_ms.max(event.timestamp_ms);
-        self.count += 1;
-    }
+/// An activity session: starts with a click, extends while cursor is moving.
+struct ActivitySession {
+    /// Timestamp of the first click that started this session.
+    first_click_ms: u64,
+    /// Position of the first click (used as fallback center).
+    click_x: f64,
+    click_y: f64,
+    /// Timestamp of the last active event (click or fast movement).
+    last_active_ms: u64,
 }
 
 /// Generate zoom keyframes from mouse events using default config.
@@ -37,10 +19,11 @@ pub fn generate_zoom_keyframes(events: &[MouseEvent]) -> Vec<ZoomKeyframe> {
 /// Generate zoom keyframes from mouse events with custom configuration.
 ///
 /// Algorithm:
-/// 1. Filter to click events only
-/// 2. Cluster clicks within merge_threshold_ms into single groups
-/// 3. Generate a keyframe per cluster with ease-in, hold, and ease-out
-/// 4. Merge overlapping keyframes
+/// 1. A click starts a new activity session
+/// 2. Cursor movement with velocity > threshold extends the session
+/// 3. Additional clicks also extend the session
+/// 4. Session ends when cursor is idle for idle_timeout_ms
+/// 5. Each session becomes a keyframe with ease-in/hold/ease-out
 pub fn generate_zoom_keyframes_with_config(
     events: &[MouseEvent],
     config: &ZoomConfig,
@@ -49,53 +32,102 @@ pub fn generate_zoom_keyframes_with_config(
         return Vec::new();
     }
 
-    let clicks: Vec<&MouseEvent> = events.iter().filter(|e| e.click).collect();
-    if clicks.is_empty() {
+    let sessions = detect_sessions(events, config);
+    if sessions.is_empty() {
         return Vec::new();
     }
 
-    // Step 1: Cluster nearby clicks
-    let clusters = cluster_clicks(&clicks, config.merge_threshold_ms);
-
-    // Step 2: Generate keyframes from clusters
-    let mut keyframes: Vec<ZoomKeyframe> = clusters
+    // Convert sessions to keyframes
+    let mut keyframes: Vec<ZoomKeyframe> = sessions
         .iter()
-        .map(|cluster| {
-            let total_duration = config.ease_in_ms + config.hold_ms + config.ease_out_ms;
+        .map(|session| {
+            let start_ms = session.first_click_ms.saturating_sub(config.ease_in_ms);
+            let session_hold = session.last_active_ms.saturating_sub(session.first_click_ms);
+            let hold = session_hold.max(config.hold_ms);
+            let total_duration = config.ease_in_ms + hold + config.ease_out_ms;
             ZoomKeyframe {
-                start_ms: cluster.timestamp_ms.saturating_sub(config.ease_in_ms),
-                end_ms: cluster
-                    .timestamp_ms
-                    .saturating_sub(config.ease_in_ms)
-                    .saturating_add(total_duration),
-                center_x: cluster.centroid_x,
-                center_y: cluster.centroid_y,
+                start_ms,
+                end_ms: start_ms.saturating_add(total_duration),
+                center_x: session.click_x,
+                center_y: session.click_y,
                 scale: config.scale,
             }
         })
         .collect();
 
-    // Step 3: Merge overlapping keyframes
+    // Merge overlapping keyframes
     merge_overlapping(&mut keyframes);
 
     keyframes
 }
 
-/// Group clicks that occur within threshold_ms of each other.
-fn cluster_clicks(clicks: &[&MouseEvent], threshold_ms: u64) -> Vec<ClickCluster> {
-    let mut clusters: Vec<ClickCluster> = Vec::new();
+/// Detect activity sessions from mouse events.
+///
+/// A session starts on a click and extends while cursor is actively moving
+/// or additional clicks occur. Ends after idle_timeout_ms of inactivity.
+fn detect_sessions(events: &[MouseEvent], config: &ZoomConfig) -> Vec<ActivitySession> {
+    let mut sessions: Vec<ActivitySession> = Vec::new();
+    let mut current: Option<ActivitySession> = None;
+    let mut prev_event: Option<&MouseEvent> = None;
 
-    for click in clicks {
-        if let Some(last) = clusters.last_mut() {
-            if click.timestamp_ms.saturating_sub(last.timestamp_ms) <= threshold_ms {
-                last.merge(click);
-                continue;
+    for event in events {
+        // Check if the current session has timed out before processing this event
+        if let Some(session) = &current {
+            if event.timestamp_ms.saturating_sub(session.last_active_ms) > config.idle_timeout_ms {
+                sessions.push(current.take().unwrap());
             }
         }
-        clusters.push(ClickCluster::from_event(click));
+
+        if event.click {
+            // A click starts or extends a session
+            match &mut current {
+                None => {
+                    current = Some(ActivitySession {
+                        first_click_ms: event.timestamp_ms,
+                        click_x: event.x,
+                        click_y: event.y,
+                        last_active_ms: event.timestamp_ms,
+                    });
+                }
+                Some(session) => {
+                    session.last_active_ms = event.timestamp_ms;
+                }
+            }
+        } else if let Some(session) = &mut current {
+            // Movement event while in a session — check velocity
+            let velocity = if let Some(prev) = prev_event {
+                compute_velocity(prev, event)
+            } else {
+                0.0
+            };
+
+            if velocity > config.velocity_threshold {
+                // Cursor is actively moving, extend session
+                session.last_active_ms = event.timestamp_ms;
+            }
+        }
+
+        prev_event = Some(event);
     }
 
-    clusters
+    // Don't forget the last session
+    if let Some(session) = current {
+        sessions.push(session);
+    }
+
+    sessions
+}
+
+/// Compute cursor velocity (pixels/second) between two events.
+fn compute_velocity(prev: &MouseEvent, curr: &MouseEvent) -> f64 {
+    let dt_ms = curr.timestamp_ms.saturating_sub(prev.timestamp_ms);
+    if dt_ms == 0 {
+        return 0.0;
+    }
+    let dx = curr.x - prev.x;
+    let dy = curr.y - prev.y;
+    let distance = (dx * dx + dy * dy).sqrt();
+    distance / (dt_ms as f64 / 1000.0)
 }
 
 /// Merge keyframes whose time ranges overlap.
@@ -166,7 +198,7 @@ fn cubic_ease_in_out(t: f64) -> f64 {
     }
 }
 
-/// Get the zoom center position at a given timestamp, interpolating between keyframes.
+/// Get the zoom center position at a given timestamp (static center from keyframe).
 pub fn zoom_center_at(keyframes: &[ZoomKeyframe], timestamp_ms: u64) -> Option<(f64, f64)> {
     for kf in keyframes {
         if timestamp_ms >= kf.start_ms && timestamp_ms <= kf.end_ms {
@@ -174,6 +206,71 @@ pub fn zoom_center_at(keyframes: &[ZoomKeyframe], timestamp_ms: u64) -> Option<(
         }
     }
     None
+}
+
+/// Get the zoom center that follows the cursor path during a zoom session.
+///
+/// During ease-in: interpolates from keyframe's static center toward cursor position.
+/// During hold: returns the smoothed cursor position (center follows cursor).
+/// During ease-out: holds the cursor position at the moment ease-out started.
+pub fn zoom_center_at_with_path(
+    keyframes: &[ZoomKeyframe],
+    smoothed_path: &[SmoothedPoint],
+    timestamp_ms: u64,
+    config: &ZoomConfig,
+) -> Option<(f64, f64)> {
+    if !config.follow_cursor || smoothed_path.is_empty() {
+        return zoom_center_at(keyframes, timestamp_ms);
+    }
+
+    for kf in keyframes {
+        if timestamp_ms < kf.start_ms || timestamp_ms > kf.end_ms {
+            continue;
+        }
+
+        let elapsed = timestamp_ms - kf.start_ms;
+        let total = kf.end_ms - kf.start_ms;
+
+        if elapsed <= config.ease_in_ms {
+            // Ease in: blend from static center to cursor position
+            let cursor = find_cursor_at(smoothed_path, timestamp_ms);
+            let t = if config.ease_in_ms > 0 {
+                cubic_ease_in_out(elapsed as f64 / config.ease_in_ms as f64)
+            } else {
+                1.0
+            };
+            let x = kf.center_x + (cursor.0 - kf.center_x) * t;
+            let y = kf.center_y + (cursor.1 - kf.center_y) * t;
+            return Some((x, y));
+        } else if elapsed <= total.saturating_sub(config.ease_out_ms) {
+            // Hold: follow cursor directly
+            let cursor = find_cursor_at(smoothed_path, timestamp_ms);
+            return Some(cursor);
+        } else {
+            // Ease out: hold the cursor position from when ease-out started
+            let ease_out_start_ms = kf.start_ms + total.saturating_sub(config.ease_out_ms);
+            let cursor = find_cursor_at(smoothed_path, ease_out_start_ms);
+            return Some(cursor);
+        }
+    }
+
+    None
+}
+
+/// Find the smoothed cursor position at a given timestamp via binary search.
+fn find_cursor_at(path: &[SmoothedPoint], timestamp_ms: u64) -> (f64, f64) {
+    if path.is_empty() {
+        return (0.0, 0.0);
+    }
+
+    // Binary search for the last point with timestamp <= target
+    let idx = match path.binary_search_by_key(&timestamp_ms, |p| p.timestamp_ms) {
+        Ok(i) => i,
+        Err(0) => 0,
+        Err(i) => i - 1,
+    };
+
+    (path[idx].x, path[idx].y)
 }
 
 #[cfg(test)]
@@ -217,7 +314,8 @@ mod tests {
         assert_eq!(keyframes[0].center_x, 100.0);
         assert_eq!(keyframes[0].center_y, 200.0);
         assert_eq!(keyframes[0].start_ms, 700); // 1000 - 300 ease_in
-        assert_eq!(keyframes[0].end_ms, 2000); // 700 + 300 + 600 + 400
+        // end = 700 + 300 + max(0, 600) + 400 = 2000
+        assert_eq!(keyframes[0].end_ms, 2000);
         assert_eq!(keyframes[0].scale, 2.0);
     }
 
@@ -230,23 +328,24 @@ mod tests {
 
     #[test]
     fn nearby_clicks_are_clustered() {
+        // Two clicks within a short time — second click extends the session
         let events = vec![
             click(100.0, 200.0, 1000),
-            click(120.0, 220.0, 1200), // within 300ms threshold
+            click(120.0, 220.0, 1200), // within idle_timeout (500ms)
         ];
         let config = default_config();
         let keyframes = generate_zoom_keyframes_with_config(&events, &config);
         assert_eq!(keyframes.len(), 1);
-        // Centroid of (100,200) and (120,220)
-        assert!((keyframes[0].center_x - 110.0).abs() < 0.01);
-        assert!((keyframes[0].center_y - 210.0).abs() < 0.01);
+        // Center is the first click position (session start)
+        assert_eq!(keyframes[0].center_x, 100.0);
+        assert_eq!(keyframes[0].center_y, 200.0);
     }
 
     #[test]
     fn distant_clicks_produce_separate_keyframes() {
         let events = vec![
             click(100.0, 200.0, 1000),
-            click(500.0, 600.0, 5000), // well beyond threshold
+            click(500.0, 600.0, 5000), // well beyond idle timeout
         ];
         let config = default_config();
         let keyframes = generate_zoom_keyframes_with_config(&events, &config);
@@ -260,14 +359,18 @@ mod tests {
         // Two clicks close enough that their keyframe time ranges overlap
         let events = vec![
             click(100.0, 200.0, 1000),
-            click(200.0, 300.0, 2000), // separate clusters but overlapping keyframes
+            click(200.0, 300.0, 2000),
         ];
         let mut config = default_config();
-        config.merge_threshold_ms = 100; // don't cluster, but keyframes will overlap
+        config.idle_timeout_ms = 100; // short timeout so they're separate sessions
         config.ease_in_ms = 300;
         config.hold_ms = 600;
         config.ease_out_ms = 400;
-        // kf1: 700..2000, kf2: 1700..3000 → overlap → merge
+        // Session 1: click at 1000, no subsequent activity → hold=600
+        // kf1: start=700, end=700+300+600+400=2000
+        // Session 2: click at 2000, no subsequent activity → hold=600
+        // kf2: start=1700, end=1700+300+600+400=3000
+        // They overlap → merge
         let keyframes = generate_zoom_keyframes_with_config(&events, &config);
         assert_eq!(keyframes.len(), 1);
         assert_eq!(keyframes[0].start_ms, 700);
@@ -356,6 +459,9 @@ mod tests {
             movement(410.0, 510.0, 5500),
         ];
         let keyframes = generate_zoom_keyframes(&events);
+        // With default config: first click at 1000, moves at 1500/2000 have high velocity
+        // so they extend the session. Then idle from 2000..5000 (3000ms > 500ms timeout)
+        // → session ends. Second click at 5000 starts a new session.
         assert_eq!(keyframes.len(), 2);
     }
 
@@ -366,5 +472,147 @@ mod tests {
         config.scale = 3.0;
         let keyframes = generate_zoom_keyframes_with_config(&events, &config);
         assert_eq!(keyframes[0].scale, 3.0);
+    }
+
+    // --- New tests for session-based detection ---
+
+    #[test]
+    fn cursor_movement_extends_session() {
+        // Click, then fast cursor movement — should be one extended session
+        let events = vec![
+            click(100.0, 200.0, 1000),
+            movement(200.0, 200.0, 1100), // 100px in 100ms = 1000 px/s (fast)
+            movement(300.0, 200.0, 1200), // still fast
+            movement(400.0, 200.0, 1300), // still fast
+        ];
+        let config = default_config();
+        let keyframes = generate_zoom_keyframes_with_config(&events, &config);
+        assert_eq!(keyframes.len(), 1);
+        // Session should extend to 1300ms (last active movement)
+        // hold = max(1300 - 1000, 600) = 600
+        // start = 700, end = 700 + 300 + 600 + 400 = 2000
+        assert_eq!(keyframes[0].start_ms, 700);
+        assert!(keyframes[0].end_ms >= 2000);
+    }
+
+    #[test]
+    fn slow_movement_does_not_extend_session() {
+        // Click, then very slow movement — session should not extend
+        let events = vec![
+            click(100.0, 200.0, 1000),
+            movement(101.0, 200.0, 2000), // 1px in 1000ms = 1 px/s (slow)
+        ];
+        let mut config = default_config();
+        config.idle_timeout_ms = 500;
+        config.velocity_threshold = 50.0;
+        let keyframes = generate_zoom_keyframes_with_config(&events, &config);
+        assert_eq!(keyframes.len(), 1);
+        // Session should NOT be extended by the slow movement
+        // hold = max(0, 600) = 600
+        assert_eq!(keyframes[0].start_ms, 700);
+        assert_eq!(keyframes[0].end_ms, 2000); // 700 + 300 + 600 + 400
+    }
+
+    #[test]
+    fn session_ends_on_idle_timeout() {
+        // Click, fast movement, then long pause, then another click
+        let events = vec![
+            click(100.0, 200.0, 1000),
+            movement(200.0, 200.0, 1100), // fast
+            movement(200.0, 200.0, 2000), // idle for 900ms > 500ms timeout
+            click(500.0, 500.0, 3000),
+        ];
+        let config = default_config();
+        let keyframes = generate_zoom_keyframes_with_config(&events, &config);
+        assert_eq!(keyframes.len(), 2);
+    }
+
+    #[test]
+    fn cursor_following_during_hold() {
+        let keyframes = vec![ZoomKeyframe {
+            start_ms: 700,
+            end_ms: 2000,
+            center_x: 100.0,
+            center_y: 200.0,
+            scale: 2.0,
+        }];
+        let path = vec![
+            SmoothedPoint { x: 100.0, y: 200.0, timestamp_ms: 700, velocity: 0.0 },
+            SmoothedPoint { x: 150.0, y: 250.0, timestamp_ms: 1000, velocity: 100.0 },
+            SmoothedPoint { x: 300.0, y: 400.0, timestamp_ms: 1200, velocity: 200.0 },
+        ];
+        let config = default_config();
+        // During hold phase (after ease_in of 300ms, so 1000..1600)
+        let center = zoom_center_at_with_path(&keyframes, &path, 1200, &config);
+        assert!(center.is_some());
+        let (x, y) = center.unwrap();
+        // Should follow cursor at t=1200 → (300, 400)
+        assert!((x - 300.0).abs() < 0.01);
+        assert!((y - 400.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn cursor_following_ease_in_blends() {
+        let keyframes = vec![ZoomKeyframe {
+            start_ms: 700,
+            end_ms: 2000,
+            center_x: 100.0,
+            center_y: 200.0,
+            scale: 2.0,
+        }];
+        let path = vec![
+            SmoothedPoint { x: 200.0, y: 300.0, timestamp_ms: 700, velocity: 100.0 },
+            SmoothedPoint { x: 200.0, y: 300.0, timestamp_ms: 1000, velocity: 0.0 },
+        ];
+        let config = default_config();
+        // At start of ease-in (t=700), should be at keyframe center
+        let center = zoom_center_at_with_path(&keyframes, &path, 700, &config);
+        let (x, y) = center.unwrap();
+        assert!((x - 100.0).abs() < 0.01);
+        assert!((y - 200.0).abs() < 0.01);
+
+        // At end of ease-in (t=1000), should be close to cursor position
+        let center = zoom_center_at_with_path(&keyframes, &path, 999, &config);
+        let (x, y) = center.unwrap();
+        assert!((x - 200.0).abs() < 5.0); // close to cursor
+        assert!((y - 300.0).abs() < 5.0);
+    }
+
+    #[test]
+    fn cursor_following_disabled_returns_static() {
+        let keyframes = vec![ZoomKeyframe {
+            start_ms: 700,
+            end_ms: 2000,
+            center_x: 100.0,
+            center_y: 200.0,
+            scale: 2.0,
+        }];
+        let path = vec![
+            SmoothedPoint { x: 500.0, y: 500.0, timestamp_ms: 1200, velocity: 0.0 },
+        ];
+        let mut config = default_config();
+        config.follow_cursor = false;
+        let center = zoom_center_at_with_path(&keyframes, &path, 1200, &config);
+        let (x, y) = center.unwrap();
+        // Should return static center, not cursor position
+        assert_eq!(x, 100.0);
+        assert_eq!(y, 200.0);
+    }
+
+    #[test]
+    fn find_cursor_binary_search() {
+        let path = vec![
+            SmoothedPoint { x: 10.0, y: 20.0, timestamp_ms: 100, velocity: 0.0 },
+            SmoothedPoint { x: 30.0, y: 40.0, timestamp_ms: 200, velocity: 50.0 },
+            SmoothedPoint { x: 50.0, y: 60.0, timestamp_ms: 300, velocity: 50.0 },
+        ];
+        // Exact match
+        assert_eq!(find_cursor_at(&path, 200), (30.0, 40.0));
+        // Between points — should return the earlier one
+        assert_eq!(find_cursor_at(&path, 250), (30.0, 40.0));
+        // Before first point
+        assert_eq!(find_cursor_at(&path, 50), (10.0, 20.0));
+        // After last point
+        assert_eq!(find_cursor_at(&path, 500), (50.0, 60.0));
     }
 }

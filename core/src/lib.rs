@@ -52,6 +52,24 @@ pub fn zoom_center_at(keyframes: Vec<ZoomKeyframe>, timestamp_ms: u64) -> Vec<f6
     }
 }
 
+/// Get the zoom center position that follows the cursor path.
+///
+/// Returns [x, y] of the dynamic center, or empty vec if no active keyframe.
+/// During ease-in, blends from keyframe center to cursor. During hold, follows cursor.
+/// During ease-out, holds the cursor position from when ease-out began.
+#[uniffi::export]
+pub fn zoom_center_at_following(
+    keyframes: Vec<ZoomKeyframe>,
+    smoothed_path: Vec<SmoothedPoint>,
+    timestamp_ms: u64,
+    config: ZoomConfig,
+) -> Vec<f64> {
+    match zoom::zoom_center_at_with_path(&keyframes, &smoothed_path, timestamp_ms, &config) {
+        Some((x, y)) => vec![x, y],
+        None => vec![],
+    }
+}
+
 /// Smooth a raw cursor path using exponential moving average.
 ///
 /// `alpha` controls smoothing: 0.0 = very smooth, 1.0 = no smoothing.

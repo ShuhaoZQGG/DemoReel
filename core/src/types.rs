@@ -170,6 +170,12 @@ pub struct ZoomConfig {
     pub ease_out_ms: u64,
     pub merge_threshold_ms: u64,
     pub enabled: bool,
+    /// How long (ms) cursor must be idle before ending a zoom session.
+    pub idle_timeout_ms: u64,
+    /// Cursor velocity (px/s) below which the cursor is considered idle.
+    pub velocity_threshold: f64,
+    /// When true, zoom center follows cursor during a session instead of using a fixed point.
+    pub follow_cursor: bool,
 }
 
 impl Default for ZoomConfig {
@@ -181,6 +187,9 @@ impl Default for ZoomConfig {
             ease_out_ms: 400,
             merge_threshold_ms: 300,
             enabled: true,
+            idle_timeout_ms: 1500,
+            velocity_threshold: 50.0,
+            follow_cursor: true,
         }
     }
 }
@@ -371,6 +380,12 @@ pub struct ProjectFile {
     pub zoom_ease_out_ms: u64,
     pub zoom_merge_threshold_ms: u64,
     pub zoom_enabled: bool,
+    #[serde(default = "default_idle_timeout_ms")]
+    pub zoom_idle_timeout_ms: u64,
+    #[serde(default = "default_velocity_threshold")]
+    pub zoom_velocity_threshold: f64,
+    #[serde(default = "default_follow_cursor")]
+    pub zoom_follow_cursor: bool,
     pub bg_type: String,
     pub bg_hex: String,
     pub bg_gradient_from_hex: String,
@@ -389,6 +404,16 @@ pub struct ProjectFile {
     pub cursor_highlight_color_hex: String,
     pub trim_start_ms: u64,
     pub trim_end_ms: u64,
+}
+
+fn default_idle_timeout_ms() -> u64 {
+    1500
+}
+fn default_velocity_threshold() -> f64 {
+    50.0
+}
+fn default_follow_cursor() -> bool {
+    true
 }
 
 /// Error type for event log parsing.
