@@ -25,6 +25,12 @@ final class KeyboardShortcutMonitor {
         case undo
         case redo
         case nudgeFocusPoint(dx: Double, dy: Double)
+        case adjustZoomDuration(deltaMs: Int64)
+        case adjustZoomScale(delta: Double)
+        case nudgeZoomPosition(deltaMs: Int64)
+        case duplicateSelection
+        case selectNextZoom
+        case selectPreviousZoom
     }
 
     private var monitor: Any?
@@ -62,6 +68,10 @@ final class KeyboardShortcutMonitor {
                     self.lastAction = ActionEvent(action: .redo)
                     return nil
                 }
+                if chars == "d" && flags == .command {
+                    self.lastAction = ActionEvent(action: .duplicateSelection)
+                    return nil
+                }
             }
 
             // Only handle bare keystrokes (plus arrow-key modifiers and Shift for nudge)
@@ -87,10 +97,43 @@ final class KeyboardShortcutMonitor {
                 return nil
             }
 
+            // Tab for zoom clip navigation
+            if event.keyCode == 48 {
+                self.lastAction = ActionEvent(action: flags.contains(.shift) ? .selectPreviousZoom : .selectNextZoom)
+                return nil
+            }
+
             // Check keyCode actions first (for special keys like Delete, Escape)
             if let action = Self.keyCodeActions[event.keyCode] {
                 self.lastAction = ActionEvent(action: action)
                 return nil
+            }
+
+            // Zoom clip adjustment keys (Shift changes step size)
+            if let chars = event.charactersIgnoringModifiers, let char = chars.first {
+                let isShift = flags.contains(.shift)
+                switch char {
+                case "[":
+                    self.lastAction = ActionEvent(action: .adjustZoomDuration(deltaMs: isShift ? -50 : -200))
+                    return nil
+                case "]":
+                    self.lastAction = ActionEvent(action: .adjustZoomDuration(deltaMs: isShift ? 50 : 200))
+                    return nil
+                case "=":
+                    self.lastAction = ActionEvent(action: .adjustZoomScale(delta: 0.25))
+                    return nil
+                case "-":
+                    self.lastAction = ActionEvent(action: .adjustZoomScale(delta: -0.25))
+                    return nil
+                case ",":
+                    self.lastAction = ActionEvent(action: .nudgeZoomPosition(deltaMs: isShift ? -25 : -100))
+                    return nil
+                case ".":
+                    self.lastAction = ActionEvent(action: .nudgeZoomPosition(deltaMs: isShift ? 25 : 100))
+                    return nil
+                default:
+                    break
+                }
             }
 
             // Then check character actions (for letter keys like C, Z)

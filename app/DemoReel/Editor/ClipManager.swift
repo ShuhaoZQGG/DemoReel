@@ -222,6 +222,31 @@ final class ClipManager {
         zoomClips.removeAll { ids.contains($0.id) }
     }
 
+    /// Duplicate zoom clips, placing copies immediately after each original.
+    /// Returns the IDs of the new clips.
+    @discardableResult
+    func duplicateZoomClips(ids: Set<UUID>) -> [UUID] {
+        saveUndoState()
+        let toDuplicate = zoomClips.filter { ids.contains($0.id) }
+            .sorted { $0.timelineStartMs < $1.timelineStartMs }
+        var newIds: [UUID] = []
+        for zc in toDuplicate {
+            let newClip = ZoomClip(
+                timelineStartMs: zc.timelineEndMs,
+                durationMs: zc.durationMs,
+                centerX: zc.centerX,
+                centerY: zc.centerY,
+                scale: zc.scale,
+                easeInMs: zc.easeInMs,
+                easeOutMs: zc.easeOutMs,
+                easeEnabled: zc.easeEnabled
+            )
+            newIds.append(newClip.id)
+            zoomClips.append(newClip)
+        }
+        return newIds
+    }
+
     /// Find the clip at a given source time.
     func clip(atSourceTimeMs ms: UInt64) -> Clip? {
         clips.first(where: { $0.sourceStartMs <= ms && $0.sourceEndMs > ms })

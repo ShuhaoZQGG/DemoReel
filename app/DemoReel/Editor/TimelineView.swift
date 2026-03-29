@@ -79,10 +79,13 @@ struct TimelineView: View {
     @Binding var zoomPlacementActive: Bool
     var zoomPlacementScale: Double
     var onPlaceZoom: (UInt64) -> Void
+    var thumbnailCache: ThumbnailCache
     @State private var hoverTimelinePosition: Double? = nil
     @State private var hoveredVideoClipId: UUID? = nil
     @State private var hoveredZoomClipId: UUID? = nil
     @State private var hoveredTrack: HoveredTrack = .none
+    @State private var snappingEnabled: Bool = true
+    @State private var activeSnapLineMs: UInt64? = nil
 
     enum HoveredTrack {
         case none, video, zoom
@@ -108,6 +111,20 @@ struct TimelineView: View {
         return clipManager.zoomClips.filter { ids.contains($0.id) }.allSatisfy(\.easeEnabled)
     }
 
+    private var snapTargets: [SnapEngine.SnapTarget] {
+        SnapEngine.targets(
+            playheadMs: UInt64(timelinePosition * 1000),
+            clips: clipManager.clips,
+            zoomClips: clipManager.zoomClips,
+            trimStartMs: UInt64(trimStart * 1000),
+            trimEndMs: UInt64(trimEnd * 1000)
+        )
+    }
+
+    private var optionHeld: Bool {
+        NSEvent.modifierFlags.contains(.option)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             transportBar
@@ -115,6 +132,24 @@ struct TimelineView: View {
             timelineCanvas
         }
         .background(.background)
+        .task {
+            requestAllThumbnails()
+        }
+        .onChange(of: pixelsPerSecond) {
+            thumbnailCache.invalidateAndRegenerate(
+                clips: clipManager.clips,
+                pixelsPerSecond: pixelsPerSecond,
+                mediaItems: { clipManager.mediaItem(for: $0) }
+            )
+        }
+    }
+
+    private func requestAllThumbnails() {
+        thumbnailCache.ensureThumbnails(
+            clips: clipManager.clips,
+            pixelsPerSecond: pixelsPerSecond,
+            mediaItems: { clipManager.mediaItem(for: $0) }
+        )
     }
 
     // MARK: - Transport Bar
@@ -215,6 +250,15 @@ struct TimelineView: View {
             .buttonStyle(.plain)
             .foregroundStyle(zoomPlacementActive ? .green : .primary)
             .tooltip("Add zoom clip (Z)")
+
+            Divider().frame(height: 16)
+
+            Button(action: { snappingEnabled.toggle() }) {
+                Image(systemName: snappingEnabled ? "magnet.fill" : "magnet")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(snappingEnabled ? .yellow : .primary)
+            .tooltip("Snap to guides (\u{2325} to bypass)")
 
             Divider().frame(height: 16)
 
@@ -362,7 +406,10 @@ struct TimelineView: View {
                     hoverTimelinePositionMs: hoverTimelinePosition.map { UInt64($0 * 1000) },
                     onScissorCut: { timelineMs in
                         clipManager.splitZoomClip(atTimelineMs: timelineMs)
-                    }
+                    },
+                    snapTargets: snapTargets,
+                    snappingEnabled: snappingEnabled,
+                    activeSnapLineMs: $activeSnapLineMs
                 )
                 .offset(y: 60)
 
@@ -371,9 +418,19 @@ struct TimelineView: View {
                     .gesture(
                         DragGesture()
                             .onChanged { value in
-                                let newTime = max(0, value.location.x / pixelsPerSecond)
+                                var newTime = max(0, value.location.x / pixelsPerSecond)
+                                if snappingEnabled && !optionHeld {
+                                    let proposedMs = UInt64(newTime * 1000)
+                                    if let snapped = SnapEngine.snap(proposedMs: proposedMs, targets: snapTargets, thresholdPx: 8, pixelsPerSecond: pixelsPerSecond, excludeMs: [UInt64(trimStart * 1000)]) {
+                                        newTime = Double(snapped) / 1000.0
+                                        activeSnapLineMs = snapped
+                                    } else {
+                                        activeSnapLineMs = nil
+                                    }
+                                }
                                 trimStart = min(newTime, trimEnd - 0.1)
                             }
+                            .onEnded { _ in activeSnapLineMs = nil }
                     )
 
                 // Trim end handle
@@ -381,10 +438,30 @@ struct TimelineView: View {
                     .gesture(
                         DragGesture()
                             .onChanged { value in
-                                let newTime = min(duration, value.location.x / pixelsPerSecond)
+                                var newTime = min(duration, value.location.x / pixelsPerSecond)
+                                if snappingEnabled && !optionHeld {
+                                    let proposedMs = UInt64(newTime * 1000)
+                                    if let snapped = SnapEngine.snap(proposedMs: proposedMs, targets: snapTargets, thresholdPx: 8, pixelsPerSecond: pixelsPerSecond, excludeMs: [UInt64(trimEnd * 1000)]) {
+                                        newTime = Double(snapped) / 1000.0
+                                        activeSnapLineMs = snapped
+                                    } else {
+                                        activeSnapLineMs = nil
+                                    }
+                                }
                                 trimEnd = max(newTime, trimStart + 0.1)
                             }
+                            .onEnded { _ in activeSnapLineMs = nil }
                     )
+
+                // Snap guide line
+                if let snapMs = activeSnapLineMs {
+                    let snapX = Double(snapMs) / 1000.0 * pixelsPerSecond
+                    Rectangle()
+                        .fill(Color.yellow.opacity(0.8))
+                        .frame(width: 1, height: 160)
+                        .offset(x: snapX, y: 0)
+                        .allowsHitTesting(false)
+                }
 
                 // Playhead
                 Rectangle()
@@ -504,7 +581,8 @@ struct TimelineView: View {
                 isMagneted: magnetedIdsForVideo.contains(clip.id),
                 isHovered: scissorModeActive && hoveredVideoClipId == clip.id && hoveredTrack == .video,
                 sourceName: clipManager.mediaItem(for: clip)?.name,
-                sourceColor: colorForMediaItem(clip.mediaItemId)
+                sourceColor: colorForMediaItem(clip.mediaItemId),
+                thumbnails: thumbnailCache.thumbnails(for: clip, pixelsPerSecond: pixelsPerSecond, mediaItem: clipManager.mediaItem(for: clip))
             )
             .offset(x: x + (isDragging ? dragOffset : 0), y: 22)
             .opacity(isDragging ? 0.6 : 1.0)
@@ -524,16 +602,34 @@ struct TimelineView: View {
                 DragGesture(minimumDistance: 5)
                     .onChanged { value in
                         draggingClipId = clip.id
-                        dragOffset = value.translation.width
-                    }
-                    .onEnded { value in
                         let currentX = Double(clip.timelineStartMs) / 1000.0 * pixelsPerSecond
-                        let newX = max(0, currentX + value.translation.width)
+                        let proposedX = max(0, currentX + value.translation.width)
+                        let proposedMs = UInt64(proposedX / pixelsPerSecond * 1000)
+
+                        if snappingEnabled && !optionHeld {
+                            let exclude: Set<UInt64> = [clip.timelineStartMs, clip.timelineEndMs]
+                            if let snapped = SnapEngine.snap(proposedMs: proposedMs, targets: snapTargets, thresholdPx: 8, pixelsPerSecond: pixelsPerSecond, excludeMs: exclude) {
+                                let snappedX = Double(snapped) / 1000.0 * pixelsPerSecond
+                                dragOffset = snappedX - currentX
+                                activeSnapLineMs = snapped
+                            } else {
+                                dragOffset = value.translation.width
+                                activeSnapLineMs = nil
+                            }
+                        } else {
+                            dragOffset = value.translation.width
+                            activeSnapLineMs = nil
+                        }
+                    }
+                    .onEnded { _ in
+                        let currentX = Double(clip.timelineStartMs) / 1000.0 * pixelsPerSecond
+                        let newX = max(0, currentX + dragOffset)
                         let newTimelineMs = UInt64(newX / pixelsPerSecond * 1000)
                         clipManager.moveOnTimeline(clipId: clip.id, toTimelineMs: newTimelineMs)
                         draggingClipId = nil
                         dragOffset = 0
                         magnetedIds = []
+                        activeSnapLineMs = nil
                     }
             )
         }
@@ -783,11 +879,28 @@ struct ClipSegmentView: View {
     var isHovered: Bool = false
     var sourceName: String? = nil
     var sourceColor: Color = Color.gray.opacity(0.15)
+    var thumbnails: [NSImage] = []
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 4)
                 .fill(fillColor)
+
+            if !thumbnails.isEmpty {
+                let thumbWidth = width / Double(thumbnails.count)
+                HStack(spacing: 0) {
+                    ForEach(Array(thumbnails.enumerated()), id: \.offset) { _, thumb in
+                        Image(nsImage: thumb)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: thumbWidth, height: 30)
+                            .clipped()
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .opacity(0.6)
+            }
+
             RoundedRectangle(cornerRadius: 4)
                 .strokeBorder(borderColor, lineWidth: (isMagneted || isHovered) ? 2 : 1)
             VStack(spacing: 1) {

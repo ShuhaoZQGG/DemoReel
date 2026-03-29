@@ -26,6 +26,7 @@ struct EditorView: View {
     @State private var restorableZoomCount: Int = 0
     /// The video URL currently being previewed (changes as playhead moves across multi-source clips).
     @State private var activeVideoURL: URL?
+    @State private var thumbnailCache = ThumbnailCache()
 
     enum SidebarTab: String, CaseIterable {
         case media = "Media"
@@ -82,7 +83,8 @@ struct EditorView: View {
                     scissorModeActive: $scissorModeActive,
                     zoomPlacementActive: $zoomPlacementActive,
                     zoomPlacementScale: zoomConfig.scale,
-                    onPlaceZoom: { ms in placeZoomClip(atTimelineMs: ms) }
+                    onPlaceZoom: { ms in placeZoomClip(atTimelineMs: ms) },
+                    thumbnailCache: thumbnailCache
                 )
                 .frame(height: 200)
             }
@@ -321,6 +323,9 @@ struct EditorView: View {
             centerY: 0.5,
             scale: zoomConfig.scale
         )
+        if let newClip = clipManager.zoomClips.last {
+            selection = .zoomClips([newClip.id])
+        }
     }
 
     private func changeZoomScale(_ scale: Double) {
@@ -391,6 +396,18 @@ struct EditorView: View {
             clipManager.redo()
         case .nudgeFocusPoint(let dx, let dy):
             nudgeFocusPoint(dx: dx, dy: dy)
+        case .adjustZoomDuration(let deltaMs):
+            adjustSelectedZoomDuration(deltaMs: deltaMs)
+        case .adjustZoomScale(let delta):
+            adjustSelectedZoomScale(delta: delta)
+        case .nudgeZoomPosition(let deltaMs):
+            nudgeSelectedZoomPosition(deltaMs: deltaMs)
+        case .duplicateSelection:
+            duplicateSelected()
+        case .selectNextZoom:
+            selectAdjacentZoom(forward: true)
+        case .selectPreviousZoom:
+            selectAdjacentZoom(forward: false)
         }
     }
 
@@ -403,6 +420,72 @@ struct EditorView: View {
         let clip = clipManager.zoomClips[idx]
         clipManager.zoomClips[idx].centerX = min(max(clip.centerX + dx, 0), videoWidth)
         clipManager.zoomClips[idx].centerY = min(max(clip.centerY + dy, 0), videoHeight)
+    }
+
+    private func adjustSelectedZoomDuration(deltaMs: Int64) {
+        guard case .zoomClips(let ids) = selection else { return }
+        clipManager.saveUndoStateDebounced()
+        for id in ids {
+            if let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id }) {
+                let newDuration = max(200, Int64(clipManager.zoomClips[idx].durationMs) + deltaMs)
+                clipManager.zoomClips[idx].durationMs = UInt64(newDuration)
+            }
+        }
+    }
+
+    private func adjustSelectedZoomScale(delta: Double) {
+        guard case .zoomClips(let ids) = selection else { return }
+        clipManager.saveUndoStateDebounced()
+        for id in ids {
+            if let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id }) {
+                let newScale = min(5.0, max(1.25, clipManager.zoomClips[idx].scale + delta))
+                clipManager.zoomClips[idx].scale = newScale
+            }
+        }
+    }
+
+    private func nudgeSelectedZoomPosition(deltaMs: Int64) {
+        guard case .zoomClips(let ids) = selection else { return }
+        clipManager.saveUndoStateDebounced()
+        for id in ids {
+            if let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id }) {
+                let newStart = max(0, Int64(clipManager.zoomClips[idx].timelineStartMs) + deltaMs)
+                clipManager.zoomClips[idx].timelineStartMs = UInt64(newStart)
+            }
+        }
+    }
+
+    private func duplicateSelected() {
+        switch selection {
+        case .zoomClips(let ids):
+            let newIds = clipManager.duplicateZoomClips(ids: ids)
+            if !newIds.isEmpty {
+                selection = .zoomClips(Set(newIds))
+            }
+        default:
+            break
+        }
+    }
+
+    private func selectAdjacentZoom(forward: Bool) {
+        let sorted = clipManager.zoomClips.sorted { $0.timelineStartMs < $1.timelineStartMs }
+        guard !sorted.isEmpty else { return }
+
+        var currentIndex: Int? = nil
+        if case .zoomClips(let ids) = selection, let id = ids.first {
+            currentIndex = sorted.firstIndex(where: { $0.id == id })
+        }
+
+        let nextIndex: Int
+        if let current = currentIndex {
+            nextIndex = forward
+                ? (current + 1) % sorted.count
+                : (current - 1 + sorted.count) % sorted.count
+        } else {
+            nextIndex = forward ? 0 : sorted.count - 1
+        }
+
+        selection = .zoomClips([sorted[nextIndex].id])
     }
 
     private func deleteSelected() {

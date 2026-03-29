@@ -19,6 +19,9 @@ struct ZoomClipTrack: View {
     var onResizeEaseOut: (UUID, UInt64) -> Void
     var hoverTimelinePositionMs: UInt64? = nil
     var onScissorCut: ((UInt64) -> Void)? = nil
+    var snapTargets: [SnapEngine.SnapTarget] = []
+    var snappingEnabled: Bool = false
+    @Binding var activeSnapLineMs: UInt64?
 
     @State private var draggingId: UUID?
     @State private var dragOffset: Double = 0
@@ -134,18 +137,37 @@ struct ZoomClipTrack: View {
                                 gestureLocked = true
                             }
 
+                            let canSnap = snappingEnabled && !NSEvent.modifierFlags.contains(.option)
+
                             if resizingEdge != nil {
                                 resizeOffset = value.translation.width
                             } else if draggingId != nil {
-                                dragOffset = value.translation.width
+                                let currentX = Double(zc.timelineStartMs) / 1000.0 * pixelsPerSecond
+                                let proposedX = max(0, currentX + value.translation.width)
+                                let proposedMs = UInt64(proposedX / pixelsPerSecond * 1000)
+
+                                if canSnap {
+                                    let exclude: Set<UInt64> = [zc.timelineStartMs, zc.timelineEndMs]
+                                    if let snapped = SnapEngine.snap(proposedMs: proposedMs, targets: snapTargets, thresholdPx: 8, pixelsPerSecond: pixelsPerSecond, excludeMs: exclude) {
+                                        let snappedX = Double(snapped) / 1000.0 * pixelsPerSecond
+                                        dragOffset = snappedX - currentX
+                                        activeSnapLineMs = snapped
+                                    } else {
+                                        dragOffset = value.translation.width
+                                        activeSnapLineMs = nil
+                                    }
+                                } else {
+                                    dragOffset = value.translation.width
+                                    activeSnapLineMs = nil
+                                }
                             }
                         }
-                        .onEnded { value in
+                        .onEnded { _ in
                             if let edge = resizingEdge {
-                                applyResize(edge: edge, zoomClip: zc, offset: value.translation.width)
+                                applyResize(edge: edge, zoomClip: zc, offset: resizeOffset)
                             } else if draggingId != nil {
                                 let currentX = Double(zc.timelineStartMs) / 1000.0 * pixelsPerSecond
-                                let newX = max(0, currentX + value.translation.width)
+                                let newX = max(0, currentX + dragOffset)
                                 let newMs = UInt64(newX / pixelsPerSecond * 1000)
                                 onDragMove(zc.id, newMs)
                             }
@@ -154,6 +176,7 @@ struct ZoomClipTrack: View {
                             resizingEdge = nil
                             resizeOffset = 0
                             gestureLocked = false
+                            activeSnapLineMs = nil
                         }
                 )
                 .offset(x: visualX + (isDragging ? dragOffset : 0))
@@ -194,18 +217,30 @@ struct ZoomClipTrack: View {
     private func applyResize(edge: ResizeEdge, zoomClip: ZoomClip, offset: Double) {
         let deltaMs = Int64(offset / pixelsPerSecond * 1000)
         let minDurationMs: UInt64 = 100
+        let canSnap = snappingEnabled && !NSEvent.modifierFlags.contains(.option)
 
         switch edge {
         case .left(let id):
             let newStart = max(0, Int64(zoomClip.timelineStartMs) + deltaMs)
             let maxStart = Int64(zoomClip.timelineEndMs) - Int64(minDurationMs)
-            let clampedStart = UInt64(min(newStart, maxStart))
+            var clampedStart = UInt64(min(newStart, maxStart))
+            if canSnap, let snapped = SnapEngine.snap(proposedMs: clampedStart, targets: snapTargets, thresholdPx: 8, pixelsPerSecond: pixelsPerSecond, excludeMs: [zoomClip.timelineStartMs]) {
+                clampedStart = min(snapped, UInt64(maxStart))
+            }
             onResizeLeft(id, clampedStart)
 
         case .right(let id):
             let newEnd = max(Int64(zoomClip.timelineStartMs) + Int64(minDurationMs),
                            Int64(zoomClip.timelineEndMs) + deltaMs)
-            let newDuration = UInt64(newEnd) - zoomClip.timelineStartMs
+            var newDuration = UInt64(newEnd) - zoomClip.timelineStartMs
+            if canSnap {
+                let proposedEnd = zoomClip.timelineStartMs + newDuration
+                if let snapped = SnapEngine.snap(proposedMs: proposedEnd, targets: snapTargets, thresholdPx: 8, pixelsPerSecond: pixelsPerSecond, excludeMs: [zoomClip.timelineEndMs]) {
+                    if snapped > zoomClip.timelineStartMs + minDurationMs {
+                        newDuration = snapped - zoomClip.timelineStartMs
+                    }
+                }
+            }
             onResizeRight(id, newDuration)
 
         case .easeIn(let id):
