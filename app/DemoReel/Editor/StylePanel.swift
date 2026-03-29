@@ -145,9 +145,7 @@ struct StylePanel: View {
                                 .foregroundStyle(.secondary)
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 72))], spacing: 6) {
                                 ForEach(items) { wallpaper in
-                                    Image(wallpaper.id)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
+                                    wallpaperThumbnail(name: wallpaper.id)
                                         .frame(width: 72, height: 44)
                                         .clipShape(RoundedRectangle(cornerRadius: 6))
                                         .overlay(
@@ -224,6 +222,17 @@ struct StylePanel: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    @ViewBuilder
+    private func wallpaperThumbnail(name: String) -> some View {
+        if let nsImage = NSImage(named: name) {
+            Image(nsImage: nsImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+        } else {
+            Color.gray.opacity(0.3)
+        }
     }
 
     // MARK: - Bindings
