@@ -141,8 +141,11 @@ private let log = Logger(subsystem: "com.demoreel.app", category: "WaveformCache
                 AVSampleRateKey: sourceRate,
             ]
 
-            guard let reader = try? AVAssetReader(asset: asset) else {
-                log.error("Failed to create AVAssetReader")
+            let reader: AVAssetReader
+            do {
+                reader = try AVAssetReader(asset: asset)
+            } catch {
+                log.error("Failed to create AVAssetReader: \(error.localizedDescription)")
                 await MainActor.run {
                     self.noAudio.insert(mediaItemId)
                     self.pendingIds.remove(mediaItemId)
