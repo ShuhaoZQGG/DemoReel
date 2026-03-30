@@ -35,12 +35,21 @@ private let log = Logger(subsystem: "com.demoreel.app", category: "WaveformCache
     func waveformSamples(for clip: Clip, pixelsPerSecond: Double, mediaItem: MediaItem?) -> [Float] {
         _ = generation
 
-        guard let mediaItem = mediaItem,
-              let data = cache[mediaItem.id] else { return [] }
+        guard let mediaItem = mediaItem else {
+            log.debug("waveformSamples: mediaItem is nil")
+            return []
+        }
+        guard let data = cache[mediaItem.id] else {
+            log.debug("waveformSamples: no cache for mediaItem \(mediaItem.id), cache has \(self.cache.count) entries, noAudio=\(self.noAudio.contains(mediaItem.id)), pending=\(self.pendingIds.contains(mediaItem.id))")
+            return []
+        }
 
         let startIdx = Int(clip.sourceStartMs) * data.samplesPerSecond / 1000
         let endIdx = Int(clip.sourceEndMs) * data.samplesPerSecond / 1000
-        guard startIdx < endIdx, startIdx < data.samples.count else { return [] }
+        guard startIdx < endIdx, startIdx < data.samples.count else {
+            log.debug("waveformSamples: invalid range startIdx=\(startIdx) endIdx=\(endIdx) samples=\(data.samples.count)")
+            return []
+        }
 
         let clampedEnd = min(endIdx, data.samples.count)
         let sourceSamples = Array(data.samples[startIdx..<clampedEnd])
@@ -69,6 +78,7 @@ private let log = Logger(subsystem: "com.demoreel.app", category: "WaveformCache
             result.append(maxAmp)
         }
 
+        log.debug("waveformSamples: returning \(result.count) samples for clip sourceMs=\(clip.sourceStartMs)-\(clip.sourceEndMs)")
         return result
     }
 
