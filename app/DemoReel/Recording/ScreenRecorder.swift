@@ -15,9 +15,11 @@ final class ScreenRecorder: NSObject {
 
     /// When true, system audio is captured alongside video.
     var audioEnabled = false
-    /// Pre-configured audio writer input — added to AVAssetWriter before startWriting().
+    /// Pre-configured system audio writer input — added to AVAssetWriter before startWriting().
     var audioWriterInput: AVAssetWriterInput?
-    /// External audio handler — called on captureQueue with audio sample buffers.
+    /// Pre-configured microphone writer input — added to AVAssetWriter before startWriting().
+    var micWriterInput: AVAssetWriterInput?
+    /// External audio handler — called on captureQueue with system audio sample buffers.
     var onAudioSampleBuffer: ((CMSampleBuffer) -> Void)?
 
     private var stream: SCStream?
@@ -119,6 +121,9 @@ final class ScreenRecorder: NSObject {
         if let audioInput = audioWriterInput, writer.canAdd(audioInput) {
             writer.add(audioInput)
         }
+        if let micInput = micWriterInput, writer.canAdd(micInput) {
+            writer.add(micInput)
+        }
 
         assetWriter = writer
         videoInput = input
@@ -171,6 +176,7 @@ final class ScreenRecorder: NSObject {
         guard let writer = assetWriter else { return nil }
         videoInput?.markAsFinished()
         audioWriterInput?.markAsFinished()
+        micWriterInput?.markAsFinished()
         onAudioSampleBuffer = nil
         await writer.finishWriting()
 
@@ -182,6 +188,7 @@ final class ScreenRecorder: NSObject {
         assetWriter = nil
         videoInput = nil
         audioWriterInput = nil
+        micWriterInput = nil
         pixelBufferAdaptor = nil
         firstSampleTime = nil
         sessionStarted = false

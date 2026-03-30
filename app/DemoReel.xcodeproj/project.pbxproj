@@ -16,6 +16,7 @@
 		4B3EABA594A5ACFC941CE540 /* TimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBDA14E0A7DCFE079EC0B578 /* TimelineView.swift */; };
 		5AC8A877F4147EA140183D80 /* AudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF37F4D0A360A3FBE2EC2165 /* AudioCapture.swift */; };
 		60BE27B07798ABFD43A504A6 /* EventLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77821EA51A6E7D9FD1B2AAD9 /* EventLogger.swift */; };
+		74536228C1849BBA3DEBDE83 /* MicrophoneCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABB64728B1C2DC232E42A76 /* MicrophoneCapture.swift */; };
 		828D574913AF1F366C12AC97 /* MediaItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5699930F24F39749C068008B /* MediaItem.swift */; };
 		8C2E4E26B34618B829509BD3 /* PreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83BFDD4820105159572DDDF2 /* PreviewView.swift */; };
 		91243C424403D82D1E06679D /* ScreenRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F69960E6E04D9E306FFAA2EE /* ScreenRecorder.swift */; };
@@ -64,6 +65,7 @@
 		8D16EB765B24DE5918436B00 /* SnapEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapEngine.swift; sourceTree = "<group>"; };
 		941792B02818CA58D3858944 /* DemoReelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoReelApp.swift; sourceTree = "<group>"; };
 		9F3CB6CC10C3A51D56C347A8 /* StylePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StylePanel.swift; sourceTree = "<group>"; };
+		AABB64728B1C2DC232E42A76 /* MicrophoneCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophoneCapture.swift; sourceTree = "<group>"; };
 		AB545DB725C10AF883F5E9E1 /* ClipManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipManager.swift; sourceTree = "<group>"; };
 		AFF32E808D120C70E6836921 /* CursorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorPanel.swift; sourceTree = "<group>"; };
 		C95367E29E4DE15A47052C44 /* .gitkeep */ = {isa = PBXFileReference; path = .gitkeep; sourceTree = "<group>"; };
@@ -109,6 +111,7 @@
 			children = (
 				FF37F4D0A360A3FBE2EC2165 /* AudioCapture.swift */,
 				77821EA51A6E7D9FD1B2AAD9 /* EventLogger.swift */,
+				AABB64728B1C2DC232E42A76 /* MicrophoneCapture.swift */,
 				7F4978D5C5F66FE363001369 /* RecordingOverlayPanel.swift */,
 				FD882DCDFC67858E4608DD7A /* RecordingOverlayView.swift */,
 				75A8D8861618509BE87E0D3A /* RecordingView.swift */,
@@ -258,6 +261,7 @@
 				D93ADDEE215DB289C7C365B3 /* KeyboardShortcutMonitor.swift in Sources */,
 				828D574913AF1F366C12AC97 /* MediaItem.swift in Sources */,
 				95A1D70CCE2E00DF23DF9E4A /* MediaPoolPanel.swift in Sources */,
+				74536228C1849BBA3DEBDE83 /* MicrophoneCapture.swift in Sources */,
 				BD086B8F5F43B942C9F8AF37 /* NativeExporter.swift in Sources */,
 				8C2E4E26B34618B829509BD3 /* PreviewView.swift in Sources */,
 				1E15CF88DB49D5A9618D3BA0 /* RecordingOverlayPanel.swift in Sources */,
