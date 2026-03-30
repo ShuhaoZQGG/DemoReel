@@ -36,6 +36,8 @@ Quick reference for all concepts, structs, and terminology used in the project.
 | **ZoomClip** | `ZoomClip` | A zoom effect region on the zoom track. Has `timelineStartMs`, `durationMs`, `centerX`/`centerY` (focus point, 0–1), `scale`, and per-clip ease fields (`easeInMs`, `easeOutMs`, `easeEnabled`). Overlapping zoom clips are allowed. |
 | **ClipManager** | `ClipManager` | Central manager that owns both `clips: [Clip]` and `zoomClips: [ZoomClip]`. Handles split, merge, delete, reorder, and coordinate mapping between source and timeline time. |
 | **Trim Start / End** | — | Boundaries that define the active region of the recording. Clips outside this range are excluded. |
+| **Draggable Focus Point** | — | Visual circle overlay on the preview showing the zoom center of the selected zoom clip. Draggable to reposition; arrow keys nudge it (±10px, Shift ±1px). |
+| **MediaItem** | `MediaItem` | A video source in the media pool. Has `id`, `filePath`, `durationMs`, `width`/`height`, `name`. Clips link to media items via `mediaItemId`. |
 
 ---
 
@@ -63,6 +65,8 @@ Quick reference for all concepts, structs, and terminology used in the project.
 | **ZoomClip Placement** | Interactive mode (green shadow) for placing a new zoom clip. Click the `+` button to enter, hover to preview, click to place. Exits after placement. |
 | **Zoom Scale** | Magnification level of a zoom clip. Configurable per-clip or globally via ZoomConfig. |
 | **Ease Rendering** | When per-clip ease is enabled, the zoom clip displays gradient overlays: translucent-to-solid on the left (ease-in), solid-to-translucent on the right (ease-out), with draggable boundary lines between the ease regions and the hold body. Both preview and export use per-clip ease values via `ClipManager.zoomScaleWithPerClipEase()`. |
+| **Cursor-Following Zoom** | During the hold phase, the zoom center dynamically tracks the smoothed cursor position instead of staying fixed. Controlled by `ZoomConfig.follow_cursor`. Blends from static keyframe center during ease-in, follows cursor during hold, holds last cursor position during ease-out. |
+| **Activity Session** | A period of cursor activity detected by velocity-based heuristics. Starts with a click, extends while cursor speed exceeds `velocity_threshold` (default 50 px/s), ends after `idle_timeout_ms` (default 1500ms) of inactivity. Used to generate zoom keyframes from natural mouse behavior. |
 
 ---
 
@@ -85,6 +89,27 @@ Modes are mutually exclusive — entering one deactivates the other. Press `Esca
 | **BackgroundConfig** | `BackgroundConfig` | Background behind the video: `bgType` (solid/gradient), `hex`, gradient colors, gradient angle. |
 | **AspectRatioConfig** | `AspectRatioConfig` | Output aspect ratio (e.g., 16:9, 4:3, 1:1). |
 | **CursorConfig** | `CursorConfig` | Cursor rendering: `cursorStyle`, `sizeMultiplier`, `clickHighlight` (on/off), `highlightColorHex`. |
+| **BackgroundConfig (image)** | `BackgroundConfig` | Extended to support `bg_type: "image"` with `image_name` field for wallpaper backgrounds. |
+| **WallpaperCatalog** | `WallpaperCatalog` | 25 bundled macOS/abstract wallpaper images selectable as video backgrounds. |
+
+---
+
+## Media Pool
+
+| Term | Description |
+|------|-------------|
+| **MediaPoolPanel** | Sidebar panel for importing, previewing, and managing multiple video sources. |
+| **Multi-Source Clips** | Clips can reference different video sources via `mediaItemId`. Legacy clips (nil mediaItemId) use the original recording. |
+
+---
+
+## Editor Infrastructure
+
+| Term | Description |
+|------|-------------|
+| **ThumbnailCache** | `@Observable` LRU cache that generates and stores timeline frame thumbnails asynchronously. Prevents redundant AVAssetImageGenerator work. Uses a `generation` counter to signal SwiftUI updates without observing the entire cache dictionary. |
+| **SnapEngine** | Stateless calculator that finds snap targets (other clip edges, playhead, trim bounds) for timeline alignment during drag operations. Prevents clips from snapping to their own edges. |
+| **Undo/Redo** | Cmd+Z / Cmd+Y with a 50-step history limit. Slider edits are debounced (500ms) so rapid adjustments produce a single undo entry. Cmd+Shift+Z is an alternative redo shortcut. |
 
 ---
 
@@ -106,6 +131,7 @@ Modes are mutually exclusive — entering one deactivates the other. Press `Esca
 |------|-------------|
 | **NativeExporter** | Pure Swift/AVFoundation export pipeline. Reads source video frame-by-frame, applies zoom/pan transforms, composites cursor, renders styled background, and writes to output `.mov`. |
 | **ExportManager** | Manages export state (progress, cancellation) and coordinates the export UI. |
+| **Export Formats** | MP4 (H.264/libx264), WebM (VP9/libvpx-vp9), and GIF. Format selection in ExportSheet; Rust core builds format-specific FFmpeg args. GIF has no audio track. |
 
 ---
 
@@ -122,6 +148,14 @@ Modes are mutually exclusive — entering one deactivates the other. Press `Esca
 | `Cmd+E` | Export video | Global (menu command) |
 | `Cmd+N` | New recording | Global (menu command) |
 | `Cmd+O` | Open project | Global (menu command) |
+| `Cmd+Z` | Undo | Global (via `KeyboardShortcutMonitor`) |
+| `Cmd+Y` / `Cmd+Shift+Z` | Redo | Global (via `KeyboardShortcutMonitor`) |
+| `Cmd+D` | Duplicate selection | Editor (via `KeyboardShortcutMonitor`) |
+| `Tab` / `Shift+Tab` | Select next / previous zoom clip | Editor (via `KeyboardShortcutMonitor`) |
+| `[` / `]` | Adjust zoom duration (±200ms, Shift ±50ms) | Editor (via `KeyboardShortcutMonitor`) |
+| `=` / `-` | Adjust zoom scale (±0.25) | Editor (via `KeyboardShortcutMonitor`) |
+| `,` / `.` | Nudge zoom position (±100ms, Shift ±25ms) | Editor (via `KeyboardShortcutMonitor`) |
+| Arrow keys | Nudge focus point (±10px, Shift ±1px) | Editor (via `KeyboardShortcutMonitor`) |
 
 **KeyboardShortcutMonitor** — An `@Observable` class that installs an `NSEvent` local monitor for `.keyDown` events. Catches bare keystrokes (no modifiers) regardless of which view has focus. Publishes actions via `lastAction` which EditorView observes with `.onChange`. Skips interception when a sheet is presented.
 

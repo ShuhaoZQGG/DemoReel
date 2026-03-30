@@ -4,7 +4,7 @@ Pure computation library — no macOS dependencies. Builds on any platform.
 
 ## Build & Test
 
-- `cargo test` — 52 unit tests across all modules
+- `cargo test` — 63 unit tests across all modules
 - `cargo clippy -- -D warnings` — lint
 - `cargo fmt -- --check` — format check
 - Tests use `approx` crate for floating-point comparisons
@@ -12,7 +12,7 @@ Pure computation library — no macOS dependencies. Builds on any platform.
 ## Module Map
 
 - `lib.rs` — Public API surface; all `#[uniffi::export]` functions live here
-- `zoom.rs` — Auto-zoom keyframe generation from mouse click events
+- `zoom.rs` — Auto-zoom from activity sessions (click + cursor velocity), cursor-following zoom centers
 - `cursor.rs` — Cursor path smoothing (exponential moving average)
 - `compositor.rs` — Frame dimensions, padding, aspect ratio calculations
 - `export.rs` — FFmpeg command construction (does NOT call FFmpeg directly in tests)

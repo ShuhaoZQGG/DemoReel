@@ -12,7 +12,7 @@ macOS 14+ SwiftUI application. Requires Xcode 16+, Swift 5.10.
 ## Structure
 
 - `DemoReel/Recording/` — ScreenCaptureKit capture, CGEventTap mouse/keyboard logging, overlay UI
-- `DemoReel/Editor/` — Timeline, preview player, style/cursor panels, clip management
+- `DemoReel/Editor/` — Timeline, preview player, style/cursor panels, clip management, media pool, wallpaper backgrounds
 - `DemoReel/Export/` — Export sheet UI, NativeExporter calls Rust export functions
 - `DemoReel/Shared/AppState.swift` — `@Observable` app-wide state, screen routing
 - `DemoReel/Generated/` — Auto-generated UniFFI Swift bindings (do not edit manually)

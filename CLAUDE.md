@@ -4,7 +4,7 @@ Open-source macOS screen recorder. Hybrid Rust (core library) + SwiftUI (app).
 
 ## Build & Test
 
-- `cd core && cargo test` — run all 52 Rust unit tests
+- `cd core && cargo test` — run all 63 Rust unit tests
 - `cd core && cargo clippy -- -D warnings` — lint Rust code
 - `cd core && cargo fmt -- --check` — check Rust formatting
 - `./scripts/build-rust.sh` — build universal binary + generate Swift bindings
