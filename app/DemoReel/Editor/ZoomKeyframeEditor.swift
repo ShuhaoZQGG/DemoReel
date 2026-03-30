@@ -17,6 +17,7 @@ struct ZoomClipTrack: View {
     var onResizeRight: (UUID, UInt64) -> Void
     var onResizeEaseIn: (UUID, UInt64) -> Void
     var onResizeEaseOut: (UUID, UInt64) -> Void
+    var onScaleChange: (UUID, Double) -> Void
     var hoverTimelinePositionMs: UInt64? = nil
     var onScissorCut: ((UInt64) -> Void)? = nil
     var snapTargets: [SnapEngine.SnapTarget] = []
@@ -27,8 +28,17 @@ struct ZoomClipTrack: View {
     @State private var dragOffset: Double = 0
     @State private var resizingEdge: ResizeEdge?
     @State private var resizeOffset: Double = 0
-    @State private var gestureLocked: Bool = false
     @State private var hoveredEdge: HoveredEdge = .none
+
+    enum GestureMode: Equatable {
+        case undecided(UUID)
+        case horizontal
+        case verticalScale(UUID)
+    }
+
+    @State private var gestureMode: GestureMode? = nil
+    @State private var scaleBeforeDrag: Double = 1.0
+    @State private var liveScale: Double? = nil
 
     enum ResizeEdge {
         case left(UUID)
@@ -70,11 +80,13 @@ struct ZoomClipTrack: View {
                     easeInEdgeHighlighted: hoveredEdge == .easeInEdge(zc.id),
                     easeOutEdgeHighlighted: hoveredEdge == .easeOutEdge(zc.id),
                     easeInResizeOffset: easeInResizeVisualOffset(for: zc),
-                    easeOutResizeOffset: easeOutResizeVisualOffset(for: zc)
+                    easeOutResizeOffset: easeOutResizeVisualOffset(for: zc),
+                    isScaleDragging: gestureMode == .verticalScale(zc.id),
+                    liveScale: gestureMode == .verticalScale(zc.id) ? liveScale : nil
                 )
                 .onContinuousHover { phase in
                     // Skip hover tracking during drag to avoid expensive cursor/redraw calls
-                    guard !gestureLocked else { return }
+                    guard gestureMode == nil else { return }
                     switch phase {
                     case .active(let location):
                         let clipWidth = max(visualWidth, 8)
@@ -117,7 +129,8 @@ struct ZoomClipTrack: View {
                 .highPriorityGesture(
                     DragGesture(minimumDistance: 3)
                         .onChanged { value in
-                            if !gestureLocked {
+                            if gestureMode == nil {
+                                // First event: detect edge zones immediately, center zone defers
                                 let localX = value.startLocation.x
                                 let clipWidth = max(visualWidth, 8)
                                 let easeInWidth = zc.easeEnabled ? zc.easeInFraction * clipWidth : 0
@@ -125,16 +138,45 @@ struct ZoomClipTrack: View {
 
                                 if localX < edgeHitZone {
                                     resizingEdge = .left(zc.id)
+                                    gestureMode = .horizontal
                                 } else if localX > clipWidth - edgeHitZone {
                                     resizingEdge = .right(zc.id)
+                                    gestureMode = .horizontal
                                 } else if zc.easeEnabled && abs(localX - easeInWidth) < easeEdgeHitZone {
                                     resizingEdge = .easeIn(zc.id)
+                                    gestureMode = .horizontal
                                 } else if zc.easeEnabled && abs(localX - (clipWidth - easeOutWidth)) < easeEdgeHitZone {
                                     resizingEdge = .easeOut(zc.id)
+                                    gestureMode = .horizontal
                                 } else {
-                                    draggingId = zc.id
+                                    gestureMode = .undecided(zc.id)
                                 }
-                                gestureLocked = true
+                            }
+
+                            // Resolve undecided mode based on dominant drag direction
+                            if case .undecided(let id) = gestureMode {
+                                let dx = abs(value.translation.width)
+                                let dy = abs(value.translation.height)
+                                if dx > 5 {
+                                    gestureMode = .horizontal
+                                    draggingId = id
+                                } else if dy > 5 {
+                                    gestureMode = .verticalScale(id)
+                                    scaleBeforeDrag = zc.scale
+                                    NSCursor.resizeUpDown.set()
+                                } else {
+                                    return // not enough movement to decide yet
+                                }
+                            }
+
+                            // Handle vertical scale drag
+                            if case .verticalScale(let id) = gestureMode, id == zc.id {
+                                let rawScale = scaleBeforeDrag - (value.translation.height / 150.0) * 3.75
+                                let clamped = min(5.0, max(1.25, rawScale))
+                                let quantized = (clamped * 4).rounded() / 4
+                                liveScale = quantized
+                                onScaleChange(id, quantized)
+                                return
                             }
 
                             let canSnap = snappingEnabled && !NSEvent.modifierFlags.contains(.option)
@@ -163,7 +205,9 @@ struct ZoomClipTrack: View {
                             }
                         }
                         .onEnded { _ in
-                            if let edge = resizingEdge {
+                            if case .verticalScale = gestureMode {
+                                NSCursor.arrow.set()
+                            } else if let edge = resizingEdge {
                                 applyResize(edge: edge, zoomClip: zc, offset: resizeOffset)
                             } else if draggingId != nil {
                                 let currentX = Double(zc.timelineStartMs) / 1000.0 * pixelsPerSecond
@@ -175,7 +219,8 @@ struct ZoomClipTrack: View {
                             dragOffset = 0
                             resizingEdge = nil
                             resizeOffset = 0
-                            gestureLocked = false
+                            gestureMode = nil
+                            liveScale = nil
                             activeSnapLineMs = nil
                         }
                 )
@@ -273,6 +318,8 @@ struct ZoomClipView: View {
     var easeOutEdgeHighlighted: Bool = false
     var easeInResizeOffset: Double = 0
     var easeOutResizeOffset: Double = 0
+    var isScaleDragging: Bool = false
+    var liveScale: Double? = nil
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -335,10 +382,24 @@ struct ZoomClipView: View {
                 .strokeBorder(borderColor, lineWidth: (isMagneted || isHovered) ? 2 : 1)
 
             // Scale label
-            Text(String(format: "%.1fx", zoomClip.scale))
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(isSelected ? .purple : .blue)
+            if isScaleDragging, let scale = liveScale {
+                HStack(spacing: 2) {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.system(size: 8, weight: .bold))
+                    Text(String(format: "%.2fx", scale))
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(Color.black.opacity(0.5)))
                 .frame(maxWidth: .infinity)
+            } else {
+                Text(String(format: "%.1fx", zoomClip.scale))
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(isSelected ? .purple : .blue)
+                    .frame(maxWidth: .infinity)
+            }
 
             // Left edge resize indicator
             if leftEdgeHighlighted {

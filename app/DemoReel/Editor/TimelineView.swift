@@ -264,21 +264,33 @@ struct TimelineView: View {
 
             // Speed selector (video clips only)
             if case .zoomClips(let ids) = selection {
-                // Zoom scale selector
+                // Zoom scale slider
+                Slider(
+                    value: Binding(
+                        get: { currentZoomScale },
+                        set: { onZoomScaleChange($0) }
+                    ),
+                    in: 1.25...5.0,
+                    step: 0.25
+                )
+                .frame(width: 80)
+                .tooltip("Zoom scale (drag to adjust)")
+
+                // Zoom scale preset menu
                 Menu {
-                    ForEach([1.5, 2.0, 2.5, 3.0, 4.0], id: \.self) { scale in
-                        Button(String(format: "%.1fx", scale)) {
+                    ForEach([1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0], id: \.self) { scale in
+                        Button(String(format: "%.2fx", scale)) {
                             onZoomScaleChange(scale)
                         }
                     }
                 } label: {
-                    Text(String(format: "%.1fx", currentZoomScale))
+                    Text(String(format: "%.2fx", currentZoomScale))
                         .font(.system(.caption, design: .monospaced))
-                        .frame(width: 36)
+                        .frame(width: 42)
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                .tooltip("Zoom scale")
+                .tooltip("Zoom scale presets")
 
                 // Ease toggle for selected zoom clips
                 Button(action: {
@@ -401,6 +413,12 @@ struct TimelineView: View {
                         if let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id }) {
                             clipManager.saveUndoState()
                             clipManager.zoomClips[idx].easeOutMs = newEaseOutMs
+                        }
+                    },
+                    onScaleChange: { id, newScale in
+                        clipManager.saveUndoStateDebounced()
+                        if let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id }) {
+                            clipManager.zoomClips[idx].scale = newScale
                         }
                     },
                     hoverTimelinePositionMs: hoverTimelinePosition.map { UInt64($0 * 1000) },
