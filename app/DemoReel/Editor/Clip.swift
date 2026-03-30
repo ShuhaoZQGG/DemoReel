@@ -1,7 +1,7 @@
 import Foundation
 
 /// A segment of a source video with independent speed.
-struct Clip: Identifiable, Codable {
+struct Clip: Identifiable, Codable, Equatable {
     let id: UUID
     var sourceStartMs: UInt64
     var sourceEndMs: UInt64

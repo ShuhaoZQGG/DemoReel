@@ -163,6 +163,9 @@ struct TimelineView: View {
         .task {
             requestAllThumbnails()
         }
+        .onChange(of: clipManager.clips) {
+            requestAllThumbnails()
+        }
         .onChange(of: pixelsPerSecond) {
             thumbnailCache.invalidateAndRegenerate(
                 clips: clipManager.clips,
