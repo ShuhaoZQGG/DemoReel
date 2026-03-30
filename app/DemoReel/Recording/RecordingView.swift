@@ -14,6 +14,7 @@ struct RecordingView: View {
     @State private var errorMessage: String?
     @State private var hasAccessibilityPermission = false
     @State private var overlayPanel: RecordingOverlayPanel?
+    @State private var audioEnabled: Bool = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -66,6 +67,12 @@ struct RecordingView: View {
                     presentPicker()
                 }
             }
+
+            Toggle(isOn: $audioEnabled) {
+                Label("Record system audio", systemImage: audioEnabled ? "mic.fill" : "mic.slash")
+            }
+            .toggleStyle(.switch)
+            .foregroundStyle(.secondary)
 
             if let error = errorMessage {
                 Text(error)
@@ -150,7 +157,20 @@ struct RecordingView: View {
             let videoURL = AppState.recordingsDirectory
                 .appendingPathComponent("\(recordingId).mov")
 
+            recorder.audioEnabled = audioEnabled
+            if audioEnabled {
+                let audioInput = audioCapture.makeAudioInput()
+                recorder.audioWriterInput = audioInput
+                recorder.onAudioSampleBuffer = { [audioCapture] sampleBuffer in
+                    audioCapture.appendSampleBuffer(sampleBuffer)
+                }
+            } else {
+                recorder.audioWriterInput = nil
+                recorder.onAudioSampleBuffer = nil
+            }
+
             try await recorder.startRecording(filter: filter, outputURL: videoURL)
+            audioCapture.start()
 
             // captureRect.origin is already in Quartz screen coords (top-left origin),
             // confirmed by matching CGWindowList kCGWindowBounds values.
@@ -160,7 +180,6 @@ struct RecordingView: View {
                 windowQuartzOrigin: recorder.captureRect.origin,
                 screenHeight: mainScreenHeight
             )
-            audioCapture.start()
 
             elapsedSeconds = 0
             timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
@@ -254,6 +273,7 @@ struct RecordingView: View {
         let overlayView = RecordingOverlayView(
             elapsedSeconds: $elapsedSeconds,
             isPaused: $isPaused,
+            audioEnabled: $audioEnabled,
             onTogglePause: { togglePause() },
             onFinish: { Task { await finishRecording() } }
         )

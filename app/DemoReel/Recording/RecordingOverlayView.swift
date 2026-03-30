@@ -4,6 +4,7 @@ import SwiftUI
 struct RecordingOverlayView: View {
     @Binding var elapsedSeconds: Int
     @Binding var isPaused: Bool
+    @Binding var audioEnabled: Bool
     let onTogglePause: () -> Void
     let onFinish: () -> Void
 
@@ -32,6 +33,17 @@ struct RecordingOverlayView: View {
 
             Divider()
                 .frame(height: 16)
+
+            // Mic toggle (system audio)
+            Button(action: { audioEnabled.toggle() }) {
+                Image(systemName: audioEnabled ? "mic.fill" : "mic.slash.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(audioEnabled ? .white : .white.opacity(0.5))
+                    .frame(width: 32, height: 32)
+                    .background(audioEnabled ? Color.blue.opacity(0.4) : .white.opacity(0.1), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .help(audioEnabled ? "Audio on" : "Audio off")
 
             // Pause / Resume button
             Button(action: onTogglePause) {

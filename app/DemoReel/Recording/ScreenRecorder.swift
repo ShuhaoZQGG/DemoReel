@@ -13,6 +13,13 @@ final class ScreenRecorder: NSObject {
     private(set) var availableDisplays: [SCDisplay] = []
     private(set) var captureRect: CGRect = .zero
 
+    /// When true, system audio is captured alongside video.
+    var audioEnabled = false
+    /// Pre-configured audio writer input — added to AVAssetWriter before startWriting().
+    var audioWriterInput: AVAssetWriterInput?
+    /// External audio handler — called on captureQueue with audio sample buffers.
+    var onAudioSampleBuffer: ((CMSampleBuffer) -> Void)?
+
     private var stream: SCStream?
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
@@ -80,6 +87,13 @@ final class ScreenRecorder: NSObject {
         config.pixelFormat = kCVPixelFormatType_32BGRA
         config.scalesToFit = true
 
+        if audioEnabled {
+            config.capturesAudio = true
+            config.excludesCurrentProcessAudio = true
+            config.channelCount = 2
+            config.sampleRate = 48000
+        }
+
         // Set up AVAssetWriter with pixel buffer adaptor for raw frame input
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
         let videoSettings: [String: Any] = [
@@ -102,6 +116,10 @@ final class ScreenRecorder: NSObject {
 
         writer.add(input)
 
+        if let audioInput = audioWriterInput, writer.canAdd(audioInput) {
+            writer.add(audioInput)
+        }
+
         assetWriter = writer
         videoInput = input
         pixelBufferAdaptor = adaptor
@@ -112,6 +130,9 @@ final class ScreenRecorder: NSObject {
 
         let captureStream = SCStream(filter: filter, configuration: config, delegate: self)
         try captureStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: captureQueue)
+        if audioEnabled {
+            try captureStream.addStreamOutput(self, type: .audio, sampleHandlerQueue: captureQueue)
+        }
         try await captureStream.startCapture()
         stream = captureStream
         isRecording = true
@@ -149,6 +170,8 @@ final class ScreenRecorder: NSObject {
 
         guard let writer = assetWriter else { return nil }
         videoInput?.markAsFinished()
+        audioWriterInput?.markAsFinished()
+        onAudioSampleBuffer = nil
         await writer.finishWriting()
 
         if writer.status == .failed {
@@ -158,6 +181,7 @@ final class ScreenRecorder: NSObject {
         let url = writer.outputURL
         assetWriter = nil
         videoInput = nil
+        audioWriterInput = nil
         pixelBufferAdaptor = nil
         firstSampleTime = nil
         sessionStarted = false
@@ -181,6 +205,13 @@ extension ScreenRecorder: SCStreamOutput {
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of type: SCStreamOutputType
     ) {
+        // Forward audio samples to the external handler
+        if type == .audio {
+            guard !isPaused else { return }
+            onAudioSampleBuffer?(sampleBuffer)
+            return
+        }
+
         guard type == .screen else { return }
 
         // Skip frames while paused
