@@ -12,6 +12,8 @@ final class ClipManager {
     private struct Snapshot {
         let clips: [Clip]
         let zoomClips: [ZoomClip]
+        let systemAudioClips: [AudioClip]
+        let micAudioClips: [AudioClip]
     }
 
     private static let maxUndoSteps = 50
@@ -26,7 +28,7 @@ final class ClipManager {
 
     /// Save current state before a mutation. Clears the redo stack.
     func saveUndoState() {
-        undoStack.append(Snapshot(clips: clips, zoomClips: zoomClips))
+        undoStack.append(Snapshot(clips: clips, zoomClips: zoomClips, systemAudioClips: systemAudioClips, micAudioClips: micAudioClips))
         if undoStack.count > Self.maxUndoSteps {
             undoStack.removeFirst(undoStack.count - Self.maxUndoSteps)
         }
@@ -42,16 +44,20 @@ final class ClipManager {
 
     func undo() {
         guard let snapshot = undoStack.popLast() else { return }
-        redoStack.append(Snapshot(clips: clips, zoomClips: zoomClips))
+        redoStack.append(Snapshot(clips: clips, zoomClips: zoomClips, systemAudioClips: systemAudioClips, micAudioClips: micAudioClips))
         clips = snapshot.clips
         zoomClips = snapshot.zoomClips
+        systemAudioClips = snapshot.systemAudioClips
+        micAudioClips = snapshot.micAudioClips
     }
 
     func redo() {
         guard let snapshot = redoStack.popLast() else { return }
-        undoStack.append(Snapshot(clips: clips, zoomClips: zoomClips))
+        undoStack.append(Snapshot(clips: clips, zoomClips: zoomClips, systemAudioClips: systemAudioClips, micAudioClips: micAudioClips))
         clips = snapshot.clips
         zoomClips = snapshot.zoomClips
+        systemAudioClips = snapshot.systemAudioClips
+        micAudioClips = snapshot.micAudioClips
     }
 
     // MARK: - Media Pool
@@ -407,6 +413,69 @@ final class ClipManager {
             return zoomScaleAt(keyframes: kf, timestampMs: timestampMs, config: clipConfig)
         }
         return 1.0
+    }
+
+    // MARK: - Audio Clips
+
+    var systemAudioClips: [AudioClip] = []
+    var micAudioClips: [AudioClip] = []
+
+    /// Split a system audio clip at the given timeline position.
+    func splitSystemAudioClip(atTimelineMs ms: UInt64) {
+        splitAudioClipImpl(array: &systemAudioClips, atTimelineMs: ms)
+    }
+
+    /// Split a mic audio clip at the given timeline position.
+    func splitMicAudioClip(atTimelineMs ms: UInt64) {
+        splitAudioClipImpl(array: &micAudioClips, atTimelineMs: ms)
+    }
+
+    private func splitAudioClipImpl(array: inout [AudioClip], atTimelineMs ms: UInt64) {
+        guard let index = array.firstIndex(where: { ms > $0.timelineStartMs && ms < $0.timelineEndMs }) else { return }
+        saveUndoState()
+        let clip = array[index]
+        let offsetMs = ms - clip.timelineStartMs
+        let splitSourceMs = clip.sourceStartMs + offsetMs
+
+        var left = clip
+        left.sourceEndMs = splitSourceMs
+        let right = AudioClip(
+            sourceStartMs: splitSourceMs,
+            sourceEndMs: clip.sourceEndMs,
+            timelineStartMs: ms,
+            mediaItemId: clip.mediaItemId,
+            trackIndex: clip.trackIndex,
+            volume: clip.volume,
+            isMuted: clip.isMuted
+        )
+        array[index] = left
+        array.insert(right, at: index + 1)
+    }
+
+    /// Move a system audio clip to a new timeline position.
+    func moveSystemAudioClip(clipId: UUID, toTimelineMs: UInt64) {
+        guard let index = systemAudioClips.firstIndex(where: { $0.id == clipId }) else { return }
+        saveUndoState()
+        systemAudioClips[index].timelineStartMs = toTimelineMs
+    }
+
+    /// Move a mic audio clip to a new timeline position.
+    func moveMicAudioClip(clipId: UUID, toTimelineMs: UInt64) {
+        guard let index = micAudioClips.firstIndex(where: { $0.id == clipId }) else { return }
+        saveUndoState()
+        micAudioClips[index].timelineStartMs = toTimelineMs
+    }
+
+    /// Delete system audio clips by their IDs.
+    func deleteSystemAudioClips(ids: Set<UUID>) {
+        saveUndoState()
+        systemAudioClips.removeAll { ids.contains($0.id) }
+    }
+
+    /// Delete mic audio clips by their IDs.
+    func deleteMicAudioClips(ids: Set<UUID>) {
+        saveUndoState()
+        micAudioClips.removeAll { ids.contains($0.id) }
     }
 
     /// Map source time to timeline position (seconds), or nil if not on timeline.

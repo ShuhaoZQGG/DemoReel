@@ -35,6 +35,8 @@ enum TrackSelection: Equatable {
     case none
     case videoClips(Set<UUID>)
     case zoomClips(Set<UUID>)
+    case systemAudioClips(Set<UUID>)
+    case micAudioClips(Set<UUID>)
 
     var selectedVideoIds: Set<UUID> {
         if case .videoClips(let ids) = self { return ids }
@@ -46,11 +48,23 @@ enum TrackSelection: Equatable {
         return []
     }
 
+    var selectedSystemAudioIds: Set<UUID> {
+        if case .systemAudioClips(let ids) = self { return ids }
+        return []
+    }
+
+    var selectedMicAudioIds: Set<UUID> {
+        if case .micAudioClips(let ids) = self { return ids }
+        return []
+    }
+
     var count: Int {
         switch self {
         case .none: return 0
         case .videoClips(let ids): return ids.count
         case .zoomClips(let ids): return ids.count
+        case .systemAudioClips(let ids): return ids.count
+        case .micAudioClips(let ids): return ids.count
         }
     }
 }
@@ -84,12 +98,14 @@ struct TimelineView: View {
     @State private var hoverTimelinePosition: Double? = nil
     @State private var hoveredVideoClipId: UUID? = nil
     @State private var hoveredZoomClipId: UUID? = nil
+    @State private var hoveredSystemAudioClipId: UUID? = nil
+    @State private var hoveredMicAudioClipId: UUID? = nil
     @State private var hoveredTrack: HoveredTrack = .none
     @State private var snappingEnabled: Bool = true
     @State private var activeSnapLineMs: UInt64? = nil
 
     enum HoveredTrack {
-        case none, video, zoom
+        case none, video, zoom, systemAudio, mic
     }
 
     private var totalWidth: Double {
@@ -166,6 +182,12 @@ struct TimelineView: View {
         .onChange(of: clipManager.clips) {
             requestAllThumbnails()
         }
+        .onChange(of: clipManager.systemAudioClips) {
+            requestAllThumbnails()
+        }
+        .onChange(of: clipManager.micAudioClips) {
+            requestAllThumbnails()
+        }
         .onChange(of: pixelsPerSecond) {
             thumbnailCache.invalidateAndRegenerate(
                 clips: clipManager.clips,
@@ -184,6 +206,14 @@ struct TimelineView: View {
         waveformCache.ensureWaveforms(
             clips: clipManager.clips,
             mediaItems: { clipManager.mediaItem(for: $0) }
+        )
+        waveformCache.ensureWaveforms(
+            audioClips: clipManager.systemAudioClips,
+            mediaItems: { clip in clipManager.mediaItems.first(where: { $0.id == clip.mediaItemId }) }
+        )
+        waveformCache.ensureWaveforms(
+            audioClips: clipManager.micAudioClips,
+            mediaItems: { clip in clipManager.mediaItems.first(where: { $0.id == clip.mediaItemId }) }
         )
     }
 
@@ -362,6 +392,60 @@ struct TimelineView: View {
                     .fixedSize()
                     .tooltip("Easing curve")
                 }
+            } else if case .systemAudioClips(let ids) = selection {
+                // System audio controls: mute + volume
+                Button(action: {
+                    for id in ids {
+                        if let idx = clipManager.systemAudioClips.firstIndex(where: { $0.id == id }) {
+                            clipManager.systemAudioClips[idx].isMuted.toggle()
+                        }
+                    }
+                }) {
+                    Image(systemName: selectedAudioMuted(\.systemAudioClips, ids) ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(selectedAudioMuted(\.systemAudioClips, ids) ? Color.secondary : Color.cyan)
+                .tooltip("Toggle mute")
+
+                Slider(
+                    value: systemAudioVolumeBinding(ids),
+                    in: 0...1,
+                    step: 0.1
+                )
+                .frame(width: 80)
+                .tooltip("Volume")
+
+                Text(String(format: "%.0f%%", selectedAudioVolume(\.systemAudioClips, ids) * 100))
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(width: 30)
+
+            } else if case .micAudioClips(let ids) = selection {
+                // Mic audio controls: mute + volume
+                Button(action: {
+                    for id in ids {
+                        if let idx = clipManager.micAudioClips.firstIndex(where: { $0.id == id }) {
+                            clipManager.micAudioClips[idx].isMuted.toggle()
+                        }
+                    }
+                }) {
+                    Image(systemName: selectedAudioMuted(\.micAudioClips, ids) ? "mic.slash.fill" : "mic.fill")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(selectedAudioMuted(\.micAudioClips, ids) ? Color.secondary : Color.green)
+                .tooltip("Toggle mute")
+
+                Slider(
+                    value: micAudioVolumeBinding(ids),
+                    in: 0...1,
+                    step: 0.1
+                )
+                .frame(width: 80)
+                .tooltip("Volume")
+
+                Text(String(format: "%.0f%%", selectedAudioVolume(\.micAudioClips, ids) * 100))
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(width: 30)
+
             } else {
                 // Video speed selector
                 Menu {
@@ -488,6 +572,92 @@ struct TimelineView: View {
                 )
                 .offset(y: 60)
 
+                // System audio track (y: 90)
+                AudioClipTrack(
+                    clips: clipManager.systemAudioClips,
+                    pixelsPerSecond: pixelsPerSecond,
+                    trackHeight: 24,
+                    trackLabel: "System",
+                    trackColor: .cyan,
+                    selectedIds: selection.selectedSystemAudioIds,
+                    scissorModeActive: scissorModeActive,
+                    hoveredClipId: hoveredTrack == .systemAudio ? hoveredSystemAudioClipId : nil,
+                    hoverTimelinePositionMs: hoverTimelinePosition.map { UInt64($0 * 1000) },
+                    waveformSamples: { clip in
+                        waveformCache.waveformSamples(for: clip, pixelsPerSecond: pixelsPerSecond, mediaItem: clipManager.mediaItems.first(where: { $0.id == clip.mediaItemId }))
+                    },
+                    onSelect: { id, isCmd in handleAudioSelect(id: id, isCmd: isCmd, track: .systemAudio) },
+                    onDragMove: { id, ms in
+                        clipManager.moveSystemAudioClip(clipId: id, toTimelineMs: ms)
+                    },
+                    onResizeLeft: { id, newStart in
+                        if let idx = clipManager.systemAudioClips.firstIndex(where: { $0.id == id }) {
+                            clipManager.saveUndoState()
+                            let oldEnd = clipManager.systemAudioClips[idx].timelineEndMs
+                            let newSourceStart = clipManager.systemAudioClips[idx].sourceStartMs + (newStart - min(newStart, clipManager.systemAudioClips[idx].timelineStartMs))
+                            clipManager.systemAudioClips[idx].timelineStartMs = min(newStart, oldEnd - 100)
+                            clipManager.systemAudioClips[idx].sourceStartMs = newSourceStart
+                        }
+                    },
+                    onResizeRight: { id, newDuration in
+                        if let idx = clipManager.systemAudioClips.firstIndex(where: { $0.id == id }) {
+                            clipManager.saveUndoState()
+                            let maxDuration = clipManager.systemAudioClips[idx].sourceEndMs - clipManager.systemAudioClips[idx].sourceStartMs
+                            clipManager.systemAudioClips[idx].sourceEndMs = clipManager.systemAudioClips[idx].sourceStartMs + min(max(newDuration, 100), maxDuration)
+                        }
+                    },
+                    onScissorCut: { timelineMs in
+                        clipManager.splitSystemAudioClip(atTimelineMs: timelineMs)
+                    },
+                    snapTargets: snapTargets,
+                    snappingEnabled: snappingEnabled,
+                    activeSnapLineMs: $activeSnapLineMs
+                )
+                .offset(y: 90)
+
+                // Mic audio track (y: 120)
+                AudioClipTrack(
+                    clips: clipManager.micAudioClips,
+                    pixelsPerSecond: pixelsPerSecond,
+                    trackHeight: 24,
+                    trackLabel: "Mic",
+                    trackColor: .green,
+                    selectedIds: selection.selectedMicAudioIds,
+                    scissorModeActive: scissorModeActive,
+                    hoveredClipId: hoveredTrack == .mic ? hoveredMicAudioClipId : nil,
+                    hoverTimelinePositionMs: hoverTimelinePosition.map { UInt64($0 * 1000) },
+                    waveformSamples: { clip in
+                        waveformCache.waveformSamples(for: clip, pixelsPerSecond: pixelsPerSecond, mediaItem: clipManager.mediaItems.first(where: { $0.id == clip.mediaItemId }))
+                    },
+                    onSelect: { id, isCmd in handleAudioSelect(id: id, isCmd: isCmd, track: .mic) },
+                    onDragMove: { id, ms in
+                        clipManager.moveMicAudioClip(clipId: id, toTimelineMs: ms)
+                    },
+                    onResizeLeft: { id, newStart in
+                        if let idx = clipManager.micAudioClips.firstIndex(where: { $0.id == id }) {
+                            clipManager.saveUndoState()
+                            let oldEnd = clipManager.micAudioClips[idx].timelineEndMs
+                            let newSourceStart = clipManager.micAudioClips[idx].sourceStartMs + (newStart - min(newStart, clipManager.micAudioClips[idx].timelineStartMs))
+                            clipManager.micAudioClips[idx].timelineStartMs = min(newStart, oldEnd - 100)
+                            clipManager.micAudioClips[idx].sourceStartMs = newSourceStart
+                        }
+                    },
+                    onResizeRight: { id, newDuration in
+                        if let idx = clipManager.micAudioClips.firstIndex(where: { $0.id == id }) {
+                            clipManager.saveUndoState()
+                            let maxDuration = clipManager.micAudioClips[idx].sourceEndMs - clipManager.micAudioClips[idx].sourceStartMs
+                            clipManager.micAudioClips[idx].sourceEndMs = clipManager.micAudioClips[idx].sourceStartMs + min(max(newDuration, 100), maxDuration)
+                        }
+                    },
+                    onScissorCut: { timelineMs in
+                        clipManager.splitMicAudioClip(atTimelineMs: timelineMs)
+                    },
+                    snapTargets: snapTargets,
+                    snappingEnabled: snappingEnabled,
+                    activeSnapLineMs: $activeSnapLineMs
+                )
+                .offset(y: 120)
+
                 // Trim start handle
                 TrimHandle(position: trimStart * pixelsPerSecond, side: .left, height: 160)
                     .gesture(
@@ -588,6 +758,10 @@ struct TimelineView: View {
                         hoveredTrack = .video
                     } else if location.y >= 60 && location.y < 84 {
                         hoveredTrack = .zoom
+                    } else if location.y >= 90 && location.y < 114 {
+                        hoveredTrack = .systemAudio
+                    } else if location.y >= 120 && location.y < 144 {
+                        hoveredTrack = .mic
                     } else {
                         hoveredTrack = .none
                     }
@@ -596,6 +770,8 @@ struct TimelineView: View {
                     let posMs = UInt64(seconds * 1000)
                     hoveredVideoClipId = clipManager.clips.first(where: { posMs >= $0.timelineStartMs && posMs < $0.timelineEndMs })?.id
                     hoveredZoomClipId = clipManager.zoomClips.first(where: { posMs >= $0.timelineStartMs && posMs < $0.timelineEndMs })?.id
+                    hoveredSystemAudioClipId = clipManager.systemAudioClips.first(where: { posMs >= $0.timelineStartMs && posMs < $0.timelineEndMs })?.id
+                    hoveredMicAudioClipId = clipManager.micAudioClips.first(where: { posMs >= $0.timelineStartMs && posMs < $0.timelineEndMs })?.id
 
                     // Scrub preview to hover position (only when not playing)
                     if !isPlaying {
@@ -750,6 +926,58 @@ struct TimelineView: View {
         magnetedIds = []
     }
 
+    private func handleAudioSelect(id: UUID, isCmd: Bool, track: HoveredTrack) {
+        let makeSelection: (Set<UUID>) -> TrackSelection = track == .systemAudio ? TrackSelection.systemAudioClips : TrackSelection.micAudioClips
+        let currentIds: Set<UUID> = track == .systemAudio ? selection.selectedSystemAudioIds : selection.selectedMicAudioIds
+        let isCurrentTrack = !currentIds.isEmpty || (track == .systemAudio ? (selection == .systemAudioClips([])) : (selection == .micAudioClips([])))
+
+        if isCmd, isCurrentTrack {
+            var ids = currentIds
+            if ids.contains(id) { ids.remove(id) } else { ids.insert(id) }
+            selection = ids.isEmpty ? .none : makeSelection(ids)
+        } else {
+            selection = makeSelection([id])
+        }
+    }
+
+    // MARK: - Audio Clip Helpers
+
+    private func selectedAudioMuted(_ keyPath: KeyPath<ClipManager, [AudioClip]>, _ ids: Set<UUID>) -> Bool {
+        clipManager[keyPath: keyPath].filter { ids.contains($0.id) }.allSatisfy(\.isMuted)
+    }
+
+    private func selectedAudioVolume(_ keyPath: KeyPath<ClipManager, [AudioClip]>, _ ids: Set<UUID>) -> Double {
+        clipManager[keyPath: keyPath].first(where: { ids.contains($0.id) })?.volume ?? 1.0
+    }
+
+    private func systemAudioVolumeBinding(_ ids: Set<UUID>) -> Binding<Double> {
+        Binding(
+            get: { selectedAudioVolume(\.systemAudioClips, ids) },
+            set: { newVolume in
+                clipManager.saveUndoStateDebounced()
+                for id in ids {
+                    if let idx = clipManager.systemAudioClips.firstIndex(where: { $0.id == id }) {
+                        clipManager.systemAudioClips[idx].volume = newVolume
+                    }
+                }
+            }
+        )
+    }
+
+    private func micAudioVolumeBinding(_ ids: Set<UUID>) -> Binding<Double> {
+        Binding(
+            get: { selectedAudioVolume(\.micAudioClips, ids) },
+            set: { newVolume in
+                clipManager.saveUndoStateDebounced()
+                for id in ids {
+                    if let idx = clipManager.micAudioClips.firstIndex(where: { $0.id == id }) {
+                        clipManager.micAudioClips[idx].volume = newVolume
+                    }
+                }
+            }
+        )
+    }
+
     private var magnetedIdsForVideo: Set<UUID> {
         if case .videoClips = selection { return magnetedIds }
         return []
@@ -780,6 +1008,10 @@ struct TimelineView: View {
             clipManager.deleteClips(ids: ids)
         case .zoomClips(let ids):
             clipManager.deleteZoomClips(ids: ids)
+        case .systemAudioClips(let ids):
+            clipManager.deleteSystemAudioClips(ids: ids)
+        case .micAudioClips(let ids):
+            clipManager.deleteMicAudioClips(ids: ids)
         case .none:
             break
         }
@@ -795,7 +1027,7 @@ struct TimelineView: View {
             magnetVideoClips(ids: ids)
         case .zoomClips(let ids):
             magnetZoomClips(ids: ids)
-        case .none:
+        default:
             break
         }
     }
@@ -848,7 +1080,7 @@ struct TimelineView: View {
             return canMergeVideoClips(ids)
         case .zoomClips:
             return canMergeZoomClips(ids)
-        case .none:
+        default:
             return false
         }
     }
@@ -876,7 +1108,7 @@ struct TimelineView: View {
             mergeVideoClips()
         case .zoomClips:
             mergeZoomClips()
-        case .none:
+        default:
             break
         }
     }
@@ -963,22 +1195,6 @@ struct ClipSegmentView: View {
             RoundedRectangle(cornerRadius: 4)
                 .fill(fillColor)
 
-            if !waveformSamples.isEmpty {
-                Canvas { context, size in
-                    let midY = size.height / 2
-                    let step = size.width / Double(waveformSamples.count)
-                    var path = Path()
-                    for (i, sample) in waveformSamples.enumerated() {
-                        let x = Double(i) * step
-                        let amp = Double(sample) * midY * 0.85
-                        path.addRect(CGRect(x: x, y: midY - amp, width: max(step, 1), height: amp * 2))
-                    }
-                    context.fill(path, with: .color(.white.opacity(0.35)))
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-                .allowsHitTesting(false)
-            }
-
             if !thumbnails.isEmpty {
                 let thumbWidth = width / Double(thumbnails.count)
                 HStack(spacing: 0) {
@@ -992,6 +1208,22 @@ struct ClipSegmentView: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 4))
                 .opacity(0.6)
+            }
+
+            if !waveformSamples.isEmpty {
+                Canvas { context, size in
+                    let midY = size.height / 2
+                    let step = size.width / Double(waveformSamples.count)
+                    var path = Path()
+                    for (i, sample) in waveformSamples.enumerated() {
+                        let x = Double(i) * step
+                        let amp = Double(sample) * midY * 0.85
+                        path.addRect(CGRect(x: x, y: midY - amp, width: max(step, 1), height: amp * 2))
+                    }
+                    context.fill(path, with: .color(.green.opacity(0.5)))
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .allowsHitTesting(false)
             }
 
             RoundedRectangle(cornerRadius: 4)

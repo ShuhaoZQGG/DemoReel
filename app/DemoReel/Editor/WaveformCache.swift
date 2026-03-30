@@ -16,15 +16,21 @@ private let log = Logger(subsystem: "com.demoreel.app", category: "WaveformCache
         let samplesPerSecond: Int  // Downsample rate (200)
     }
 
+    /// Cache key: mediaItemId + audio track index (0 = first/only track, 1 = second track, etc.)
+    private struct CacheKey: Hashable {
+        let mediaItemId: UUID
+        let trackIndex: Int
+    }
+
     // MARK: - State
 
     /// Bump to signal SwiftUI that cached content changed.
     private(set) var generation: Int = 0
 
-    private var cache: [UUID: WaveformData] = [:]       // mediaItemId → data
-    private var noAudio: Set<UUID> = []                  // mediaItemIds with no audio track
-    private var pendingIds: Set<UUID> = []
-    private var pendingTasks: [UUID: Task<Void, Never>] = [:]
+    private var cache: [CacheKey: WaveformData] = [:]
+    private var noAudio: Set<CacheKey> = []
+    private var pendingKeys: Set<CacheKey> = []
+    private var pendingTasks: [CacheKey: Task<Void, Never>] = [:]
 
     private let targetSamplesPerSecond = 200
 
@@ -39,8 +45,9 @@ private let log = Logger(subsystem: "com.demoreel.app", category: "WaveformCache
             log.debug("waveformSamples: mediaItem is nil")
             return []
         }
-        guard let data = cache[mediaItem.id] else {
-            log.debug("waveformSamples: no cache for mediaItem \(mediaItem.id), cache has \(self.cache.count) entries, noAudio=\(self.noAudio.contains(mediaItem.id)), pending=\(self.pendingIds.contains(mediaItem.id))")
+        let key = CacheKey(mediaItemId: mediaItem.id, trackIndex: 0)
+        guard let data = cache[key] else {
+            log.debug("waveformSamples: no cache for mediaItem \(mediaItem.id) track 0, cache has \(self.cache.count) entries, noAudio=\(self.noAudio.contains(key)), pending=\(self.pendingKeys.contains(key))")
             return []
         }
 
@@ -82,16 +89,63 @@ private let log = Logger(subsystem: "com.demoreel.app", category: "WaveformCache
         return result
     }
 
-    /// Request waveform extraction for all clips. Safe to call repeatedly.
+    /// Overload for AudioClip — same logic, different source type.
+    func waveformSamples(for clip: AudioClip, pixelsPerSecond: Double, mediaItem: MediaItem?) -> [Float] {
+        _ = generation
+
+        guard let mediaItem = mediaItem else { return [] }
+        let key = CacheKey(mediaItemId: mediaItem.id, trackIndex: clip.trackIndex)
+        guard let data = cache[key] else { return [] }
+
+        let startIdx = Int(clip.sourceStartMs) * data.samplesPerSecond / 1000
+        let endIdx = Int(clip.sourceEndMs) * data.samplesPerSecond / 1000
+        guard startIdx < endIdx, startIdx < data.samples.count else { return [] }
+
+        let clampedEnd = min(endIdx, data.samples.count)
+        let sourceSamples = Array(data.samples[startIdx..<clampedEnd])
+        guard !sourceSamples.isEmpty else { return [] }
+
+        let clipWidthPx = clip.sourceDuration * pixelsPerSecond
+        let pixelCount = max(1, Int(clipWidthPx))
+
+        let samplesPerPixel = Double(sourceSamples.count) / Double(pixelCount)
+        var result: [Float] = []
+        result.reserveCapacity(pixelCount)
+
+        for i in 0..<pixelCount {
+            let lo = Int(Double(i) * samplesPerPixel)
+            let hi = min(Int(Double(i + 1) * samplesPerPixel), sourceSamples.count)
+            guard lo < hi else { result.append(0); continue }
+            var maxAmp: Float = 0
+            for j in lo..<hi { maxAmp = max(maxAmp, sourceSamples[j]) }
+            result.append(maxAmp)
+        }
+        return result
+    }
+
+    /// Request waveform extraction for all video clips (track 0). Safe to call repeatedly.
     func ensureWaveforms(clips: [Clip], mediaItems: (Clip) -> MediaItem?) {
-        var seen: Set<UUID> = []
+        var seen: Set<CacheKey> = []
         for clip in clips {
             guard let mediaItem = mediaItems(clip) else { continue }
-            let id = mediaItem.id
-            guard !seen.contains(id) else { continue }
-            seen.insert(id)
-            guard cache[id] == nil, !noAudio.contains(id), !pendingIds.contains(id) else { continue }
-            startExtraction(mediaItem: mediaItem)
+            let key = CacheKey(mediaItemId: mediaItem.id, trackIndex: 0)
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            guard cache[key] == nil, !noAudio.contains(key), !pendingKeys.contains(key) else { continue }
+            startExtraction(mediaItem: mediaItem, trackIndex: 0)
+        }
+    }
+
+    /// Request waveform extraction for audio clips (per track index).
+    func ensureWaveforms(audioClips: [AudioClip], mediaItems: (AudioClip) -> MediaItem?) {
+        var seen: Set<CacheKey> = []
+        for clip in audioClips {
+            guard let mediaItem = mediaItems(clip) else { continue }
+            let key = CacheKey(mediaItemId: mediaItem.id, trackIndex: clip.trackIndex)
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            guard cache[key] == nil, !noAudio.contains(key), !pendingKeys.contains(key) else { continue }
+            startExtraction(mediaItem: mediaItem, trackIndex: clip.trackIndex)
         }
     }
 
@@ -99,20 +153,20 @@ private let log = Logger(subsystem: "com.demoreel.app", category: "WaveformCache
     func cancelAll() {
         for task in pendingTasks.values { task.cancel() }
         pendingTasks.removeAll()
-        pendingIds.removeAll()
+        pendingKeys.removeAll()
     }
 
     // MARK: - Internals
 
-    private func startExtraction(mediaItem: MediaItem) {
-        let mediaItemId = mediaItem.id
-        pendingIds.insert(mediaItemId)
+    private func startExtraction(mediaItem: MediaItem, trackIndex: Int) {
+        let key = CacheKey(mediaItemId: mediaItem.id, trackIndex: trackIndex)
+        pendingKeys.insert(key)
 
         let targetRate = targetSamplesPerSecond
         let task = Task.detached { [weak self] in
             guard let self = self else { return }
 
-            log.info("Starting waveform extraction for \(mediaItem.fileURL.lastPathComponent)")
+            log.info("Starting waveform extraction for \(mediaItem.fileURL.lastPathComponent) track \(trackIndex)")
             let asset = AVURLAsset(url: mediaItem.fileURL)
             let tracks: [AVAssetTrack]
             do {
@@ -120,23 +174,24 @@ private let log = Logger(subsystem: "com.demoreel.app", category: "WaveformCache
             } catch {
                 log.warning("No audio tracks found: \(error.localizedDescription)")
                 await MainActor.run {
-                    self.noAudio.insert(mediaItemId)
-                    self.pendingIds.remove(mediaItemId)
-                    self.pendingTasks.removeValue(forKey: mediaItemId)
+                    self.noAudio.insert(key)
+                    self.pendingKeys.remove(key)
+                    self.pendingTasks.removeValue(forKey: key)
                 }
                 return
             }
 
-            guard let audioTrack = tracks.first else {
-                log.warning("Asset has no audio tracks")
+            guard trackIndex < tracks.count else {
+                log.warning("Track index \(trackIndex) out of range (asset has \(tracks.count) audio tracks)")
                 await MainActor.run {
-                    self.noAudio.insert(mediaItemId)
-                    self.pendingIds.remove(mediaItemId)
-                    self.pendingTasks.removeValue(forKey: mediaItemId)
+                    self.noAudio.insert(key)
+                    self.pendingKeys.remove(key)
+                    self.pendingTasks.removeValue(forKey: key)
                 }
                 return
             }
-            log.info("Found audio track, format: \(audioTrack.formatDescriptions)")
+            let audioTrack = tracks[trackIndex]
+            log.info("Found audio track \(trackIndex), format: \(audioTrack.formatDescriptions)")
 
             // Use 48kHz to match ScreenCaptureKit's native audio rate.
             // AVFoundation resamples automatically if the source differs.
@@ -157,9 +212,9 @@ private let log = Logger(subsystem: "com.demoreel.app", category: "WaveformCache
             } catch {
                 log.error("Failed to create AVAssetReader: \(error.localizedDescription)")
                 await MainActor.run {
-                    self.noAudio.insert(mediaItemId)
-                    self.pendingIds.remove(mediaItemId)
-                    self.pendingTasks.removeValue(forKey: mediaItemId)
+                    self.noAudio.insert(key)
+                    self.pendingKeys.remove(key)
+                    self.pendingTasks.removeValue(forKey: key)
                 }
                 return
             }
@@ -217,13 +272,13 @@ private let log = Logger(subsystem: "com.demoreel.app", category: "WaveformCache
             let waveformData = WaveformData(samples: samples, samplesPerSecond: targetRate)
 
             await MainActor.run {
-                self.cache[mediaItemId] = waveformData
-                self.pendingIds.remove(mediaItemId)
-                self.pendingTasks.removeValue(forKey: mediaItemId)
+                self.cache[key] = waveformData
+                self.pendingKeys.remove(key)
+                self.pendingTasks.removeValue(forKey: key)
                 self.generation += 1
             }
         }
 
-        pendingTasks[mediaItemId] = task
+        pendingTasks[key] = task
     }
 }

@@ -16,6 +16,8 @@ struct PreviewView: View {
     let videoWidth: Double
     let videoHeight: Double
     var selection: TrackSelection = .none
+    var systemAudioClips: [AudioClip] = []
+    var micAudioClips: [AudioClip] = []
     var onFocusPointDragged: ((UUID, Double, Double) -> Void)?
     var onDragBegan: (() -> Void)?
 
@@ -95,6 +97,15 @@ struct PreviewView: View {
             if !playing {
                 player?.pause()
             }
+        }
+        .onChange(of: timelinePosition) { _, _ in
+            updatePlayerAudioState()
+        }
+        .onChange(of: systemAudioClips) { _, _ in
+            updatePlayerAudioState()
+        }
+        .onChange(of: micAudioClips) { _, _ in
+            updatePlayerAudioState()
         }
         .onAppear {
             setupPlayer(url: videoURL)
@@ -343,6 +354,38 @@ struct PreviewView: View {
     private var currentCursorPoint: SmoothedPoint? {
         let timestampMs = UInt64(currentTime * 1000)
         return smoothedPoints.last(where: { $0.timestampMs <= timestampMs })
+    }
+
+    /// Update AVPlayer per-track volume via AVAudioMix based on audio clip state.
+    private func updatePlayerAudioState() {
+        guard let playerItem = player?.currentItem else { return }
+        let posMs = UInt64(timelinePosition * 1000)
+
+        let sysClip = systemAudioClips.first(where: { posMs >= $0.timelineStartMs && posMs < $0.timelineEndMs })
+        let micClip = micAudioClips.first(where: { posMs >= $0.timelineStartMs && posMs < $0.timelineEndMs })
+
+        let audioTracks = playerItem.asset.tracks(withMediaType: .audio)
+        var params: [AVMutableAudioMixInputParameters] = []
+
+        for (index, track) in audioTracks.enumerated() {
+            let p = AVMutableAudioMixInputParameters(track: track)
+            let vol: Float
+            if index == 0 {
+                // System audio track
+                if let clip = sysClip, !clip.isMuted { vol = Float(clip.volume) } else if sysClip == nil { vol = 0 } else { vol = 0 }
+            } else if index == 1 {
+                // Mic track
+                if let clip = micClip, !clip.isMuted { vol = Float(clip.volume) } else if micClip == nil { vol = 0 } else { vol = 0 }
+            } else {
+                vol = 1.0
+            }
+            p.setVolume(vol, at: .zero)
+            params.append(p)
+        }
+
+        let mix = AVMutableAudioMix()
+        mix.inputParameters = params
+        playerItem.audioMix = mix
     }
 
     private func setupPlayer(url: URL?) {

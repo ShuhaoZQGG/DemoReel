@@ -53,6 +53,8 @@ struct EditorView: View {
                     videoWidth: videoWidth,
                     videoHeight: videoHeight,
                     selection: selection,
+                    systemAudioClips: clipManager.systemAudioClips,
+                    micAudioClips: clipManager.micAudioClips,
                     onFocusPointDragged: { clipID, newCenterX, newCenterY in
                         guard let idx = clipManager.zoomClips.firstIndex(where: { $0.id == clipID }) else { return }
                         clipManager.zoomClips[idx].centerX = newCenterX
@@ -268,10 +270,38 @@ struct EditorView: View {
                     for i in clipManager.clips.indices where clipManager.clips[i].mediaItemId == nil {
                         clipManager.clips[i].mediaItemId = item.id
                     }
+
+                    // Initialize audio clips from recorded audio segments
+                    initializeAudioClips(mediaItem: item)
                 }
             } catch {
                 // Fallback: still works with legacy single-source path
             }
+        }
+    }
+
+    /// Create audio clips from the recorded audio segments (enabled time ranges).
+    private func initializeAudioClips(mediaItem: MediaItem) {
+        guard clipManager.systemAudioClips.isEmpty else { return }
+        guard clipManager.micAudioClips.isEmpty else { return }
+
+        for segment in appState.systemAudioSegments {
+            clipManager.systemAudioClips.append(AudioClip(
+                sourceStartMs: segment.startMs,
+                sourceEndMs: segment.endMs,
+                timelineStartMs: segment.startMs,
+                mediaItemId: mediaItem.id,
+                trackIndex: 0
+            ))
+        }
+        for segment in appState.micAudioSegments {
+            clipManager.micAudioClips.append(AudioClip(
+                sourceStartMs: segment.startMs,
+                sourceEndMs: segment.endMs,
+                timelineStartMs: segment.startMs,
+                mediaItemId: mediaItem.id,
+                trackIndex: 1
+            ))
         }
     }
 
@@ -496,6 +526,10 @@ struct EditorView: View {
             clipManager.deleteClips(ids: ids)
         case .zoomClips(let ids):
             clipManager.deleteZoomClips(ids: ids)
+        case .systemAudioClips(let ids):
+            clipManager.deleteSystemAudioClips(ids: ids)
+        case .micAudioClips(let ids):
+            clipManager.deleteMicAudioClips(ids: ids)
         case .none:
             break
         }
