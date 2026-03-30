@@ -31,7 +31,8 @@ Each note is in its own file under `debug-notes/`.
 ## Export Pipeline
 - [16 — Unbounded Memory Growth (80 GB+)](docs/debug-notes/16-export-memory-growth.md)
 - [17 — Export Ignores All Editor Edits](docs/debug-notes/17-export-ignores-edits.md)
-- [20 - cursor-config-not-in-export](docs/debug-notes/20-cursor-config-not-in-export.md)
+- [20 — Cursor Config Not Applied in Export](docs/debug-notes/20-cursor-config-not-in-export.md)
+- [22 — Cursor Position and Quality Wrong in Export During Zoom](docs/debug-notes/22-cursor-position-and-quality-in-export.md)
 
 ## Zoom & Easing
 - [19 — Per-Clip Ease-In/Out — Stored But Not Applied](docs/debug-notes/19-per-clip-ease-not-applied.md)

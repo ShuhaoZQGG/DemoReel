@@ -50,13 +50,27 @@ final class NativeExporter {
     }
 
     /// Render a SwiftUI view to CGImage on the main thread (ImageRenderer requirement).
+    /// Renders at 2x scale for sharp cursor/vector elements, then downscales to output size.
     private func renderOnMain(_ view: ExportFrameView, size: CGSize) -> CGImage? {
         var result: CGImage?
         DispatchQueue.main.sync {
             let renderer = ImageRenderer(content: view)
             renderer.proposedSize = ProposedViewSize(size)
-            renderer.scale = 1.0
-            result = renderer.cgImage
+            renderer.scale = 2.0
+            guard let hiRes = renderer.cgImage else { return }
+            // Downscale 2x render to output size with high-quality interpolation
+            guard let ctx = CGContext(
+                data: nil,
+                width: Int(size.width),
+                height: Int(size.height),
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+            ) else { return }
+            ctx.interpolationQuality = .high
+            ctx.draw(hiRes, in: CGRect(origin: .zero, size: size))
+            result = ctx.makeImage()
         }
         return result
     }
@@ -308,8 +322,8 @@ final class NativeExporter {
                         cursorPoint: cursorPoint,
                         styleConfig: config.styleConfig,
                         cursorConfig: config.cursorConfig,
-                        videoWidth: clipVideoW,
-                        videoHeight: clipVideoH,
+                        videoWidth: screenW,
+                        videoHeight: screenH,
                         outputSize: outputSize
                     )
 
@@ -473,22 +487,27 @@ private struct ExportFrameView: View {
             GeometryReader { geo in
                 let x = fracX * geo.size.width
                 let y = fracY * geo.size.height
+                // Scale cursor to match preview appearance: the export render area
+                // (in points) is much larger than the preview container, so scale
+                // baseSize by the ratio of render width to logical screen width.
+                let cursorScale = geo.size.width / max(videoWidth, 1)
+                let scaledSize = baseSize * cursorScale
 
                 if cursorConfig.cursorStyle == "circle" {
                     ZStack {
                         if cursorConfig.clickHighlight {
                             Circle()
                                 .fill(Color(hex: cursorConfig.highlightColorHex).opacity(0.25))
-                                .frame(width: baseSize * 2.5, height: baseSize * 2.5)
+                                .frame(width: scaledSize * 2.5, height: scaledSize * 2.5)
                         }
                         Circle()
                             .fill(.white.opacity(0.9))
-                            .frame(width: baseSize, height: baseSize)
+                            .frame(width: scaledSize, height: scaledSize)
                             .shadow(color: .black.opacity(0.3), radius: 2)
                     }
                     .position(x: x, y: y)
                 } else if cursorConfig.cursorStyle == "system" {
-                    SystemCursorView(sizeMultiplier: cursorConfig.sizeMultiplier)
+                    SystemCursorView(sizeMultiplier: cursorConfig.sizeMultiplier * cursorScale)
                         .position(x: x, y: y)
                 }
             }
