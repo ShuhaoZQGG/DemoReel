@@ -121,7 +121,9 @@ import AVFoundation
                 return
             }
 
-            let sourceRate: Double = 44100
+            // Use 48kHz to match ScreenCaptureKit's native audio rate.
+            // AVFoundation resamples automatically if the source differs.
+            let sourceRate: Double = 48000
             let outputSettings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatLinearPCM,
                 AVLinearPCMBitDepthKey: 32,

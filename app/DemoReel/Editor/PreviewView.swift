@@ -69,14 +69,32 @@ struct PreviewView: View {
             setupPlayer(url: newURL)
         }
         .onChange(of: currentTime) { _, newTime in
-            // Playback is timer-driven from EditorView, not AVPlayer.play().
-            // We always keep the player paused and just seek to show the correct frame.
-            if newTime >= 0 {
+            guard newTime >= 0 else { return }
+            if isPlaying {
+                // During playback, let AVPlayer play for audio output.
+                // Only seek when the player drifts too far from the expected position.
+                if player?.rate == 0 {
+                    let cmTime = CMTime(seconds: newTime, preferredTimescale: 600)
+                    player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                    player?.play()
+                } else if let currentPlayerTime = player?.currentTime().seconds {
+                    let drift = abs(currentPlayerTime - newTime)
+                    if drift > 0.15 {
+                        let cmTime = CMTime(seconds: newTime, preferredTimescale: 600)
+                        player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                    }
+                }
+            } else {
+                // When not playing (scrubbing), seek frame-by-frame.
+                player?.pause()
                 let cmTime = CMTime(seconds: newTime, preferredTimescale: 600)
                 player?.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
             }
-            // When newTime < 0 (gap), we don't seek — the video stays on last frame
-            // but the overlay shows black (handled in the view body).
+        }
+        .onChange(of: isPlaying) { _, playing in
+            if !playing {
+                player?.pause()
+            }
         }
         .onAppear {
             setupPlayer(url: videoURL)

@@ -11,7 +11,7 @@ final class AudioCapture {
     func makeAudioInput() -> AVAssetWriterInput {
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: 44100,
+            AVSampleRateKey: 48000,
             AVNumberOfChannelsKey: 2,
         ]
         let input = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
