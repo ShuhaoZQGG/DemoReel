@@ -7,6 +7,8 @@ private let log = Logger(subsystem: "com.demoreel.app", category: "MicrophoneCap
 @Observable
 final class MicrophoneCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     private(set) var isCapturing = false
+    /// When true, incoming samples are silently dropped instead of written.
+    var isMuted = false
     private var captureSession: AVCaptureSession?
     private var writerInput: AVAssetWriterInput?
     private let captureQueue = DispatchQueue(label: "com.demoreel.mic", qos: .userInteractive)
@@ -80,6 +82,7 @@ final class MicrophoneCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDel
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
+        guard !isMuted else { return }
         guard let input = writerInput, input.isReadyForMoreMediaData else { return }
         input.append(sampleBuffer)
     }

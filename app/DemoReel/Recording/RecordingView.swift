@@ -1,6 +1,78 @@
 import SwiftUI
 import ScreenCaptureKit
 
+/// Shared audio state between RecordingView and overlay panel.
+/// Using @Observable so it works across NSHostingView boundaries.
+/// Tracks toggle timestamps to produce per-source audio segments.
+@Observable
+final class RecordingAudioState {
+    var systemAudioEnabled: Bool = false {
+        didSet {
+            audioCapture?.isMuted = !systemAudioEnabled
+            recordToggle(isSystem: true, enabled: systemAudioEnabled)
+        }
+    }
+    var micEnabled: Bool = false {
+        didSet {
+            micCapture?.isMuted = !micEnabled
+            recordToggle(isSystem: false, enabled: micEnabled)
+        }
+    }
+    var audioCapture: AudioCapture?
+    var micCapture: MicrophoneCapture?
+
+    /// Set when recording starts; used to compute toggle timestamps.
+    var recordingStartDate: Date?
+
+    private var systemOnTimestamp: UInt64?
+    private var micOnTimestamp: UInt64?
+    private(set) var systemSegments: [AudioSegment] = []
+    private(set) var micSegments: [AudioSegment] = []
+
+    private func recordToggle(isSystem: Bool, enabled: Bool) {
+        guard let startDate = recordingStartDate else { return }
+        let nowMs = UInt64(max(0, Date().timeIntervalSince(startDate)) * 1000)
+
+        if isSystem {
+            if enabled {
+                systemOnTimestamp = nowMs
+            } else if let onMs = systemOnTimestamp {
+                systemSegments.append(AudioSegment(startMs: onMs, endMs: nowMs))
+                systemOnTimestamp = nil
+            }
+        } else {
+            if enabled {
+                micOnTimestamp = nowMs
+            } else if let onMs = micOnTimestamp {
+                micSegments.append(AudioSegment(startMs: onMs, endMs: nowMs))
+                micOnTimestamp = nil
+            }
+        }
+    }
+
+    /// Close any open segments at the end of recording.
+    func finalizeSegments(durationMs: UInt64) {
+        if let onMs = systemOnTimestamp {
+            systemSegments.append(AudioSegment(startMs: onMs, endMs: durationMs))
+            systemOnTimestamp = nil
+        }
+        if let onMs = micOnTimestamp {
+            micSegments.append(AudioSegment(startMs: onMs, endMs: durationMs))
+            micOnTimestamp = nil
+        }
+    }
+
+    /// Initialize segment tracking at the start of a recording.
+    /// Seeds on-timestamps at 0 for sources that are already enabled.
+    func startRecording(systemEnabled: Bool, micEnabled: Bool) {
+        systemSegments.removeAll()
+        micSegments.removeAll()
+        recordingStartDate = Date()
+        systemOnTimestamp = systemEnabled ? 0 : nil
+        micOnTimestamp = micEnabled ? 0 : nil
+    }
+}
+
 /// Main recording UI: source picker buttons, and a compact recording indicator.
 struct RecordingView: View {
     @Bindable var appState: AppState
@@ -14,9 +86,8 @@ struct RecordingView: View {
     @State private var errorMessage: String?
     @State private var hasAccessibilityPermission = false
     @State private var overlayPanel: RecordingOverlayPanel?
-    @State private var systemAudioEnabled: Bool = false
-    @State private var micEnabled: Bool = false
     @State private var micCapture = MicrophoneCapture()
+    @State private var audioState = RecordingAudioState()
 
     var body: some View {
         VStack(spacing: 24) {
@@ -71,10 +142,10 @@ struct RecordingView: View {
             }
 
             HStack(spacing: 16) {
-                Toggle(isOn: $systemAudioEnabled) {
+                Toggle(isOn: Bindable(audioState).systemAudioEnabled) {
                     Label("System audio", systemImage: "speaker.wave.2")
                 }
-                Toggle(isOn: $micEnabled) {
+                Toggle(isOn: Bindable(audioState).micEnabled) {
                     Label("Microphone", systemImage: "mic")
                 }
             }
@@ -164,33 +235,34 @@ struct RecordingView: View {
             let videoURL = AppState.recordingsDirectory
                 .appendingPathComponent("\(recordingId).mov")
 
-            recorder.audioEnabled = systemAudioEnabled
-            if systemAudioEnabled {
-                let audioInput = audioCapture.makeAudioInput()
-                recorder.audioWriterInput = audioInput
-                recorder.onAudioSampleBuffer = { [audioCapture] sampleBuffer in
-                    audioCapture.appendSampleBuffer(sampleBuffer)
-                }
-            } else {
-                recorder.audioWriterInput = nil
-                recorder.onAudioSampleBuffer = nil
+            // Always set up both audio inputs so tracks exist in the .mov file.
+            // Toggles control mute flags — samples are dropped when muted.
+            recorder.audioEnabled = true
+            let sysAudioInput = audioCapture.makeAudioInput()
+            recorder.audioWriterInput = sysAudioInput
+            recorder.onAudioSampleBuffer = { [audioCapture] sampleBuffer in
+                audioCapture.appendSampleBuffer(sampleBuffer)
             }
+            audioState.audioCapture = audioCapture
+            audioCapture.isMuted = !audioState.systemAudioEnabled
 
-            if micEnabled {
-                let granted = await MicrophoneCapture.requestPermission()
-                if granted {
-                    let micInput = micCapture.makeAudioInput()
-                    recorder.micWriterInput = micInput
-                } else {
-                    micEnabled = false
-                }
-            } else {
-                recorder.micWriterInput = nil
+            let granted = await MicrophoneCapture.requestPermission()
+            if granted {
+                let micInput = micCapture.makeAudioInput()
+                recorder.micWriterInput = micInput
             }
+            audioState.micCapture = micCapture
+            micCapture.isMuted = !audioState.micEnabled
 
             try await recorder.startRecording(filter: filter, outputURL: videoURL)
             audioCapture.start()
-            if micEnabled { micCapture.start() }
+            micCapture.start()
+
+            // Start segment tracking — seed initial on-timestamps if already enabled
+            audioState.startRecording(
+                systemEnabled: audioState.systemAudioEnabled,
+                micEnabled: audioState.micEnabled
+            )
 
             // captureRect.origin is already in Quartz screen coords (top-left origin),
             // confirmed by matching CGWindowList kCGWindowBounds values.
@@ -248,6 +320,11 @@ struct RecordingView: View {
         audioCapture.stop()
         micCapture.stop()
 
+        // Finalize audio segments and pass to AppState
+        audioState.finalizeSegments(durationMs: UInt64(elapsedSeconds) * 1000)
+        appState.systemAudioSegments = audioState.systemSegments
+        appState.micAudioSegments = audioState.micSegments
+
         do {
             guard let videoURL = try await recorder.stopRecording() else { return }
 
@@ -294,8 +371,7 @@ struct RecordingView: View {
         let overlayView = RecordingOverlayView(
             elapsedSeconds: $elapsedSeconds,
             isPaused: $isPaused,
-            systemAudioEnabled: $systemAudioEnabled,
-            micEnabled: $micEnabled,
+            audioState: audioState,
             onTogglePause: { togglePause() },
             onFinish: { Task { await finishRecording() } }
         )

@@ -27,6 +27,10 @@ final class AppState {
     var trimStartMs: UInt64 = 0
     var trimEndMs: UInt64 = 0
 
+    // Audio segments from recording (enabled time ranges per source)
+    var systemAudioSegments: [AudioSegment] = []
+    var micAudioSegments: [AudioSegment] = []
+
     /// Directory where recordings are saved.
     static var recordingsDirectory: URL {
         let movies = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first!

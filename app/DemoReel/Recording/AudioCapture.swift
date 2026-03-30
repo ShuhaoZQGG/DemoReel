@@ -5,6 +5,8 @@ import AVFoundation
 @Observable
 final class AudioCapture {
     private(set) var isCapturing = false
+    /// When true, incoming samples are silently dropped instead of written.
+    var isMuted = false
     private var audioInput: AVAssetWriterInput?
 
     /// Create an audio input for the asset writer.
@@ -22,6 +24,7 @@ final class AudioCapture {
 
     /// Append an audio sample buffer from ScreenCaptureKit.
     func appendSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
+        guard !isMuted else { return }
         guard let input = audioInput, input.isReadyForMoreMediaData else { return }
         input.append(sampleBuffer)
     }

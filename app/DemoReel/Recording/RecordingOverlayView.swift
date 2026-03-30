@@ -4,8 +4,7 @@ import SwiftUI
 struct RecordingOverlayView: View {
     @Binding var elapsedSeconds: Int
     @Binding var isPaused: Bool
-    @Binding var systemAudioEnabled: Bool
-    @Binding var micEnabled: Bool
+    var audioState: RecordingAudioState
     let onTogglePause: () -> Void
     let onFinish: () -> Void
 
@@ -36,26 +35,26 @@ struct RecordingOverlayView: View {
                 .frame(height: 16)
 
             // System audio toggle
-            Button(action: { systemAudioEnabled.toggle() }) {
-                Image(systemName: systemAudioEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+            Button(action: { audioState.systemAudioEnabled.toggle() }) {
+                Image(systemName: audioState.systemAudioEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
                     .font(.system(size: 13))
-                    .foregroundStyle(systemAudioEnabled ? .white : .white.opacity(0.5))
+                    .foregroundStyle(audioState.systemAudioEnabled ? .white : .white.opacity(0.5))
                     .frame(width: 32, height: 32)
-                    .background(systemAudioEnabled ? Color.blue.opacity(0.4) : .white.opacity(0.1), in: Circle())
+                    .background(audioState.systemAudioEnabled ? Color.blue.opacity(0.4) : .white.opacity(0.1), in: Circle())
             }
             .buttonStyle(.plain)
-            .help(systemAudioEnabled ? "System audio on" : "System audio off")
+            .help(audioState.systemAudioEnabled ? "System audio on" : "System audio off")
 
             // Microphone toggle
-            Button(action: { micEnabled.toggle() }) {
-                Image(systemName: micEnabled ? "mic.fill" : "mic.slash.fill")
+            Button(action: { audioState.micEnabled.toggle() }) {
+                Image(systemName: audioState.micEnabled ? "mic.fill" : "mic.slash.fill")
                     .font(.system(size: 13))
-                    .foregroundStyle(micEnabled ? .white : .white.opacity(0.5))
+                    .foregroundStyle(audioState.micEnabled ? .white : .white.opacity(0.5))
                     .frame(width: 32, height: 32)
-                    .background(micEnabled ? Color.green.opacity(0.4) : .white.opacity(0.1), in: Circle())
+                    .background(audioState.micEnabled ? Color.green.opacity(0.4) : .white.opacity(0.1), in: Circle())
             }
             .buttonStyle(.plain)
-            .help(micEnabled ? "Microphone on" : "Microphone off")
+            .help(audioState.micEnabled ? "Microphone on" : "Microphone off")
 
             // Pause / Resume button
             Button(action: onTogglePause) {
