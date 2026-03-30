@@ -27,6 +27,7 @@ struct EditorView: View {
     /// The video URL currently being previewed (changes as playhead moves across multi-source clips).
     @State private var activeVideoURL: URL?
     @State private var thumbnailCache = ThumbnailCache()
+    @State private var waveformCache = WaveformCache()
 
     enum SidebarTab: String, CaseIterable {
         case media = "Media"
@@ -84,7 +85,8 @@ struct EditorView: View {
                     zoomPlacementActive: $zoomPlacementActive,
                     zoomPlacementScale: zoomConfig.scale,
                     onPlaceZoom: { ms in placeZoomClip(atTimelineMs: ms) },
-                    thumbnailCache: thumbnailCache
+                    thumbnailCache: thumbnailCache,
+                    waveformCache: waveformCache
                 )
                 .frame(height: 200)
             }

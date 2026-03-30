@@ -80,6 +80,7 @@ struct TimelineView: View {
     var zoomPlacementScale: Double
     var onPlaceZoom: (UInt64) -> Void
     var thumbnailCache: ThumbnailCache
+    var waveformCache: WaveformCache
     @State private var hoverTimelinePosition: Double? = nil
     @State private var hoveredVideoClipId: UUID? = nil
     @State private var hoveredZoomClipId: UUID? = nil
@@ -175,6 +176,10 @@ struct TimelineView: View {
         thumbnailCache.ensureThumbnails(
             clips: clipManager.clips,
             pixelsPerSecond: pixelsPerSecond,
+            mediaItems: { clipManager.mediaItem(for: $0) }
+        )
+        waveformCache.ensureWaveforms(
+            clips: clipManager.clips,
             mediaItems: { clipManager.mediaItem(for: $0) }
         )
     }
@@ -649,7 +654,8 @@ struct TimelineView: View {
                 isHovered: scissorModeActive && hoveredVideoClipId == clip.id && hoveredTrack == .video,
                 sourceName: clipManager.mediaItem(for: clip)?.name,
                 sourceColor: colorForMediaItem(clip.mediaItemId),
-                thumbnails: thumbnailCache.thumbnails(for: clip, pixelsPerSecond: pixelsPerSecond, mediaItem: clipManager.mediaItem(for: clip))
+                thumbnails: thumbnailCache.thumbnails(for: clip, pixelsPerSecond: pixelsPerSecond, mediaItem: clipManager.mediaItem(for: clip)),
+                waveformSamples: waveformCache.waveformSamples(for: clip, pixelsPerSecond: pixelsPerSecond, mediaItem: clipManager.mediaItem(for: clip))
             )
             .offset(x: x + (isDragging ? dragOffset : 0), y: 22)
             .opacity(isDragging ? 0.6 : 1.0)
@@ -947,11 +953,28 @@ struct ClipSegmentView: View {
     var sourceName: String? = nil
     var sourceColor: Color = Color.gray.opacity(0.15)
     var thumbnails: [NSImage] = []
+    var waveformSamples: [Float] = []
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 4)
                 .fill(fillColor)
+
+            if !waveformSamples.isEmpty {
+                Canvas { context, size in
+                    let midY = size.height / 2
+                    let step = size.width / Double(waveformSamples.count)
+                    var path = Path()
+                    for (i, sample) in waveformSamples.enumerated() {
+                        let x = Double(i) * step
+                        let amp = Double(sample) * midY * 0.8
+                        path.addRect(CGRect(x: x, y: midY - amp, width: max(step, 1), height: amp * 2))
+                    }
+                    context.fill(path, with: .color(sourceColor.opacity(0.3)))
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .allowsHitTesting(false)
+            }
 
             if !thumbnails.isEmpty {
                 let thumbWidth = width / Double(thumbnails.count)

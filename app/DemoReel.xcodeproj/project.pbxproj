@@ -37,10 +37,12 @@
 		EF0DF68D31E8CF2D53F09D5E /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A6FA81971BB9558E8413156 /* EditorView.swift */; };
 		F1D1A3D267F35F65D8D6A79C /* ExportManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8442CAC3A00230FBB89FD7BA /* ExportManager.swift */; };
 		F3690633F7F63BDACCBBD27A /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68F935ED02583659A6E20DA3 /* AppState.swift */; };
+		FE6E78D71661886B6E6CA23A /* WaveformCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A982ADF15AB4CA6DC8B05D9 /* WaveformCache.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		01747FBD9CFEE5094403BA58 /* Clip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clip.swift; sourceTree = "<group>"; };
+		1A982ADF15AB4CA6DC8B05D9 /* WaveformCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformCache.swift; sourceTree = "<group>"; };
 		2585DEB05CFE0432B1357304 /* ZoomClip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomClip.swift; sourceTree = "<group>"; };
 		383C3C1138528350C6D6BFB5 /* DemoReelCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoReelCore.swift; sourceTree = "<group>"; };
 		4E148B2D6FB901213ED5167C /* ThumbnailCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailCache.swift; sourceTree = "<group>"; };
@@ -167,6 +169,7 @@
 				4E148B2D6FB901213ED5167C /* ThumbnailCache.swift */,
 				FBDA14E0A7DCFE079EC0B578 /* TimelineView.swift */,
 				51BBB5A3B9889964A65088F2 /* WallpaperCatalog.swift */,
+				1A982ADF15AB4CA6DC8B05D9 /* WaveformCache.swift */,
 				2585DEB05CFE0432B1357304 /* ZoomClip.swift */,
 				8B099A312D613654F6D3B084 /* ZoomKeyframeEditor.swift */,
 			);
@@ -267,6 +270,7 @@
 				9594D7D022605A355685D8C6 /* ThumbnailCache.swift in Sources */,
 				4B3EABA594A5ACFC941CE540 /* TimelineView.swift in Sources */,
 				E1275944A530EF18139A9A6C /* WallpaperCatalog.swift in Sources */,
+				FE6E78D71661886B6E6CA23A /* WaveformCache.swift in Sources */,
 				AE02B204778F19BDD4E19FE3 /* ZoomClip.swift in Sources */,
 				060B78CF2DB3A23BB8BF872E /* ZoomKeyframeEditor.swift in Sources */,
 			);
