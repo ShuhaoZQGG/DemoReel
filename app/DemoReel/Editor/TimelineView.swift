@@ -970,10 +970,10 @@ struct ClipSegmentView: View {
                     var path = Path()
                     for (i, sample) in waveformSamples.enumerated() {
                         let x = Double(i) * step
-                        let amp = Double(sample) * midY * 0.8
+                        let amp = Double(sample) * midY * 0.85
                         path.addRect(CGRect(x: x, y: midY - amp, width: max(step, 1), height: amp * 2))
                     }
-                    context.fill(path, with: .color(sourceColor.opacity(0.3)))
+                    context.fill(path, with: .color(.white.opacity(0.35)))
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 4))
                 .allowsHitTesting(false)
