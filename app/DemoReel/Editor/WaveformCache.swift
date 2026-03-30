@@ -1,4 +1,7 @@
 import AVFoundation
+import OSLog
+
+private let log = Logger(subsystem: "com.demoreel.app", category: "WaveformCache")
 
 /// Extracts and caches audio waveform data for timeline clip visualization.
 ///
@@ -99,11 +102,13 @@ import AVFoundation
         let task = Task.detached { [weak self] in
             guard let self = self else { return }
 
+            log.info("Starting waveform extraction for \(mediaItem.fileURL.lastPathComponent)")
             let asset = AVURLAsset(url: mediaItem.fileURL)
             let tracks: [AVAssetTrack]
             do {
                 tracks = try await asset.loadTracks(withMediaType: .audio)
             } catch {
+                log.warning("No audio tracks found: \(error.localizedDescription)")
                 await MainActor.run {
                     self.noAudio.insert(mediaItemId)
                     self.pendingIds.remove(mediaItemId)
@@ -113,6 +118,7 @@ import AVFoundation
             }
 
             guard let audioTrack = tracks.first else {
+                log.warning("Asset has no audio tracks")
                 await MainActor.run {
                     self.noAudio.insert(mediaItemId)
                     self.pendingIds.remove(mediaItemId)
@@ -120,6 +126,7 @@ import AVFoundation
                 }
                 return
             }
+            log.info("Found audio track, format: \(audioTrack.formatDescriptions)")
 
             // Use 48kHz to match ScreenCaptureKit's native audio rate.
             // AVFoundation resamples automatically if the source differs.
@@ -135,6 +142,7 @@ import AVFoundation
             ]
 
             guard let reader = try? AVAssetReader(asset: asset) else {
+                log.error("Failed to create AVAssetReader")
                 await MainActor.run {
                     self.noAudio.insert(mediaItemId)
                     self.pendingIds.remove(mediaItemId)
@@ -186,8 +194,13 @@ import AVFoundation
                 }
             }
 
+            if reader.status == .failed {
+                log.error("AVAssetReader failed: \(reader.error?.localizedDescription ?? "unknown")")
+            }
+
             guard !Task.isCancelled else { return }
 
+            log.info("Extracted \(samples.count) waveform samples (peak: \(peak))")
             let waveformData = WaveformData(samples: samples, samplesPerSecond: targetRate)
 
             await MainActor.run {
