@@ -1,4 +1,4 @@
-use crate::types::{MouseEvent, SmoothedPoint, ZoomConfig, ZoomKeyframe};
+use crate::types::{EasingCurve, MouseEvent, SmoothedPoint, ZoomConfig, ZoomKeyframe};
 
 /// An activity session: starts with a click, extends while cursor is moving.
 struct ActivitySession {
@@ -167,7 +167,7 @@ pub fn zoom_scale_at(keyframes: &[ZoomKeyframe], timestamp_ms: u64, config: &Zoo
         if elapsed <= config.ease_in_ms {
             // Ease in
             let t = elapsed as f64 / config.ease_in_ms as f64;
-            let eased = cubic_ease_in_out(t);
+            let eased = apply_easing(&config.easing_curve, t);
             return 1.0 + (kf.scale - 1.0) * eased;
         } else if elapsed <= config.ease_in_ms + config.hold_ms {
             // Hold at full scale
@@ -180,12 +180,29 @@ pub fn zoom_scale_at(keyframes: &[ZoomKeyframe], timestamp_ms: u64, config: &Zoo
                 return 1.0;
             }
             let t = ease_out_elapsed as f64 / remaining as f64;
-            let eased = cubic_ease_in_out(t);
+            let eased = apply_easing(&config.easing_curve, t);
             return kf.scale - (kf.scale - 1.0) * eased;
         }
     }
 
     1.0
+}
+
+/// Linear easing (no curve).
+fn linear(t: f64) -> f64 {
+    t.clamp(0.0, 1.0)
+}
+
+/// Cubic ease-in: accelerates from zero velocity.
+fn ease_in(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * t
+}
+
+/// Cubic ease-out: decelerates to zero velocity.
+fn ease_out(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    1.0 - (1.0 - t).powi(3)
 }
 
 /// Cubic ease-in-out: approximates cubic-bezier(0.25, 0.1, 0.25, 1.0).
@@ -195,6 +212,30 @@ fn cubic_ease_in_out(t: f64) -> f64 {
         4.0 * t * t * t
     } else {
         1.0 - (-2.0 * t + 2.0).powi(3) / 2.0
+    }
+}
+
+/// Damped spring easing with slight overshoot.
+fn spring(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    if t == 0.0 {
+        return 0.0;
+    }
+    if t == 1.0 {
+        return 1.0;
+    }
+    let c4 = (2.0 * std::f64::consts::PI) / 3.0;
+    2.0_f64.powf(-10.0 * t) * ((t * 10.0 - 0.75) * c4).sin() + 1.0
+}
+
+/// Dispatch to the appropriate easing function based on the curve type.
+fn apply_easing(curve: &EasingCurve, t: f64) -> f64 {
+    match curve {
+        EasingCurve::Linear => linear(t),
+        EasingCurve::EaseIn => ease_in(t),
+        EasingCurve::EaseOut => ease_out(t),
+        EasingCurve::EaseInOut => cubic_ease_in_out(t),
+        EasingCurve::Spring => spring(t),
     }
 }
 
@@ -235,7 +276,7 @@ pub fn zoom_center_at_with_path(
             // Ease in: blend from static center to cursor position
             let cursor = find_cursor_at(smoothed_path, timestamp_ms);
             let t = if config.ease_in_ms > 0 {
-                cubic_ease_in_out(elapsed as f64 / config.ease_in_ms as f64)
+                apply_easing(&config.easing_curve, elapsed as f64 / config.ease_in_ms as f64)
             } else {
                 1.0
             };
@@ -614,5 +655,84 @@ mod tests {
         assert_eq!(find_cursor_at(&path, 50), (10.0, 20.0));
         // After last point
         assert_eq!(find_cursor_at(&path, 500), (50.0, 60.0));
+    }
+
+    // --- Easing curve tests ---
+
+    #[test]
+    fn easing_functions_boundary_values() {
+        assert!((linear(0.0) - 0.0).abs() < 1e-10);
+        assert!((linear(1.0) - 1.0).abs() < 1e-10);
+        assert!((ease_in(0.0) - 0.0).abs() < 1e-10);
+        assert!((ease_in(1.0) - 1.0).abs() < 1e-10);
+        assert!((ease_out(0.0) - 0.0).abs() < 1e-10);
+        assert!((ease_out(1.0) - 1.0).abs() < 1e-10);
+        assert!((cubic_ease_in_out(0.0) - 0.0).abs() < 1e-10);
+        assert!((cubic_ease_in_out(1.0) - 1.0).abs() < 1e-10);
+        assert!((spring(0.0) - 0.0).abs() < 1e-10);
+        assert!((spring(1.0) - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn easing_functions_monotonic_except_spring() {
+        for func in [linear, ease_in, ease_out, cubic_ease_in_out] {
+            let mut prev = 0.0;
+            for i in 0..=100 {
+                let t = i as f64 / 100.0;
+                let v = func(t);
+                assert!(v >= prev - 1e-10, "Monotonicity violated at t={t}");
+                prev = v;
+            }
+        }
+    }
+
+    #[test]
+    fn spring_overshoots() {
+        let mut found_overshoot = false;
+        for i in 1..100 {
+            let t = i as f64 / 100.0;
+            if spring(t) > 1.0 {
+                found_overshoot = true;
+                break;
+            }
+        }
+        assert!(found_overshoot, "Spring easing should overshoot 1.0");
+    }
+
+    #[test]
+    fn apply_easing_dispatches_correctly() {
+        let t = 0.5;
+        assert_eq!(apply_easing(&EasingCurve::Linear, t), linear(t));
+        assert_eq!(apply_easing(&EasingCurve::EaseIn, t), ease_in(t));
+        assert_eq!(apply_easing(&EasingCurve::EaseOut, t), ease_out(t));
+        assert_eq!(apply_easing(&EasingCurve::EaseInOut, t), cubic_ease_in_out(t));
+        assert_eq!(apply_easing(&EasingCurve::Spring, t), spring(t));
+    }
+
+    #[test]
+    fn zoom_scale_with_different_curves() {
+        let keyframes = vec![ZoomKeyframe {
+            start_ms: 700,
+            end_ms: 2000,
+            center_x: 0.0,
+            center_y: 0.0,
+            scale: 2.0,
+        }];
+        let mut config_linear = default_config();
+        config_linear.easing_curve = EasingCurve::Linear;
+        let scale_linear = zoom_scale_at(&keyframes, 850, &config_linear);
+
+        let mut config_ease_in = default_config();
+        config_ease_in.easing_curve = EasingCurve::EaseIn;
+        let scale_ease_in = zoom_scale_at(&keyframes, 850, &config_ease_in);
+
+        let config_default = default_config();
+        let scale_ease_in_out = zoom_scale_at(&keyframes, 850, &config_default);
+
+        assert!((scale_linear - 1.5).abs() < 0.01);
+        assert!(scale_ease_in < scale_linear);
+        assert!(scale_linear > 1.0 && scale_linear < 2.0);
+        assert!(scale_ease_in > 1.0 && scale_ease_in < 2.0);
+        assert!(scale_ease_in_out > 1.0 && scale_ease_in_out < 2.0);
     }
 }

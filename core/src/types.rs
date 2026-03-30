@@ -161,6 +161,17 @@ impl EventLog {
     }
 }
 
+/// Easing curve type for zoom transitions.
+#[derive(uniffi::Enum, Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
+pub enum EasingCurve {
+    Linear,
+    EaseIn,
+    EaseOut,
+    #[default]
+    EaseInOut,
+    Spring,
+}
+
 /// Configuration for the auto-zoom keyframe generator.
 #[derive(uniffi::Record, Clone, Debug)]
 pub struct ZoomConfig {
@@ -176,6 +187,8 @@ pub struct ZoomConfig {
     pub velocity_threshold: f64,
     /// When true, zoom center follows cursor during a session instead of using a fixed point.
     pub follow_cursor: bool,
+    /// Easing curve for zoom transitions.
+    pub easing_curve: EasingCurve,
 }
 
 impl Default for ZoomConfig {
@@ -190,6 +203,7 @@ impl Default for ZoomConfig {
             idle_timeout_ms: 1500,
             velocity_threshold: 50.0,
             follow_cursor: true,
+            easing_curve: EasingCurve::EaseInOut,
         }
     }
 }

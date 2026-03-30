@@ -401,7 +401,8 @@ final class ClipManager {
                 easeInMs: easeIn,
                 holdMs: holdMs,
                 easeOutMs: easeOut,
-                enabled: true
+                enabled: true,
+                easingCurve: zc.easingCurveValue
             )
             return zoomScaleAt(keyframes: kf, timestampMs: timestampMs, config: clipConfig)
         }

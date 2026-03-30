@@ -277,7 +277,8 @@ final class NativeExporter {
                         let holdMs = zc.durationMs > (easeIn + easeOut)
                             ? zc.durationMs - easeIn - easeOut : 0
                         effectiveZoomConfig = config.zoomConfig.with(
-                            easeInMs: easeIn, holdMs: holdMs, easeOutMs: easeOut
+                            easeInMs: easeIn, holdMs: holdMs, easeOutMs: easeOut,
+                            easingCurve: zc.easingCurveValue
                         )
                     } else {
                         effectiveZoomConfig = config.zoomConfig

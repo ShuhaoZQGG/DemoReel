@@ -111,6 +111,33 @@ struct TimelineView: View {
         return clipManager.zoomClips.filter { ids.contains($0.id) }.allSatisfy(\.easeEnabled)
     }
 
+    private var selectedEasingCurve: String {
+        guard case .zoomClips(let ids) = selection else { return "easeInOut" }
+        return clipManager.zoomClips.first(where: { ids.contains($0.id) })?.easingCurve ?? "easeInOut"
+    }
+
+    private func curveLabel(_ curve: String) -> String {
+        switch curve {
+        case "linear": return "Linear"
+        case "easeIn": return "Ease In"
+        case "easeOut": return "Ease Out"
+        case "easeInOut": return "Ease In Out"
+        case "spring": return "Spring"
+        default: return curve
+        }
+    }
+
+    private func curveIcon(_ curve: String) -> String {
+        switch curve {
+        case "linear": return "line.diagonal"
+        case "easeIn": return "arrow.up.right"
+        case "easeOut": return "arrow.down.right"
+        case "easeInOut": return "s.circle"
+        case "spring": return "waveform.path.ecg"
+        default: return "s.circle"
+        }
+    }
+
     private var snapTargets: [SnapEngine.SnapTarget] {
         SnapEngine.targets(
             playheadMs: UInt64(timelinePosition * 1000),
@@ -305,6 +332,28 @@ struct TimelineView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(selectedZoomEaseEnabled ? .blue : .secondary)
                 .tooltip("Toggle ease in/out")
+
+                // Easing curve picker (only when ease is enabled)
+                if selectedZoomEaseEnabled {
+                    Menu {
+                        ForEach(["linear", "easeIn", "easeOut", "easeInOut", "spring"], id: \.self) { curve in
+                            Button(action: {
+                                for id in ids {
+                                    if let idx = clipManager.zoomClips.firstIndex(where: { $0.id == id }) {
+                                        clipManager.zoomClips[idx].easingCurve = curve
+                                    }
+                                }
+                            }) {
+                                Label(curveLabel(curve), systemImage: curveIcon(curve))
+                            }
+                        }
+                    } label: {
+                        Image(systemName: curveIcon(selectedEasingCurve))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .tooltip("Easing curve")
+                }
             } else {
                 // Video speed selector
                 Menu {

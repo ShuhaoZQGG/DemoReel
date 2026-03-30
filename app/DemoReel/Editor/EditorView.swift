@@ -540,7 +540,8 @@ struct EditorView: View {
             enabled: project.zoomEnabled,
             idleTimeoutMs: project.zoomIdleTimeoutMs,
             velocityThreshold: project.zoomVelocityThreshold,
-            followCursor: project.zoomFollowCursor
+            followCursor: project.zoomFollowCursor,
+            easingCurve: .easeInOut
         )
         styleConfig = StyleConfig(
             background: BackgroundConfig(
@@ -875,7 +876,8 @@ extension ZoomConfig {
         enabled: Bool? = nil,
         idleTimeoutMs: UInt64? = nil,
         velocityThreshold: Double? = nil,
-        followCursor: Bool? = nil
+        followCursor: Bool? = nil,
+        easingCurve: EasingCurve? = nil
     ) -> ZoomConfig {
         ZoomConfig(
             scale: scale ?? self.scale,
@@ -886,7 +888,8 @@ extension ZoomConfig {
             enabled: enabled ?? self.enabled,
             idleTimeoutMs: idleTimeoutMs ?? self.idleTimeoutMs,
             velocityThreshold: velocityThreshold ?? self.velocityThreshold,
-            followCursor: followCursor ?? self.followCursor
+            followCursor: followCursor ?? self.followCursor,
+            easingCurve: easingCurve ?? self.easingCurve
         )
     }
 }
