@@ -568,6 +568,7 @@ struct TimelineView: View {
                     },
                     snapTargets: snapTargets,
                     snappingEnabled: snappingEnabled,
+                    thumbnailCache: thumbnailCache,
                     activeSnapLineMs: $activeSnapLineMs
                 )
                 .offset(y: 60)

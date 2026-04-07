@@ -26,9 +26,12 @@ import AVFoundation
     private var pendingClips: Set<UUID> = []
     private var pendingTasks: [UUID: Task<Void, Never>] = [:]
     private var generatorCache: [UUID: AVAssetImageGenerator] = [:]
+    private var zoomGeneratorCache: [UUID: AVAssetImageGenerator] = [:]
+    private var zoomPreviewCache: [ThumbnailKey: NSImage] = [:]
 
     private let maxEntries = 500
     private let thumbnailSize = CGSize(width: 80, height: 45)
+    private let zoomPreviewSize = CGSize(width: 960, height: 540)
 
     // MARK: - Public API
 
@@ -81,6 +84,39 @@ import AVFoundation
         pendingTasks.removeAll()
         pendingClips.removeAll()
         generatorCache.removeAll()
+        zoomGeneratorCache.removeAll()
+        zoomPreviewCache.removeAll()
+    }
+
+    // MARK: - Zoom Preview
+
+    /// Generate (or return cached) a high-res frame for the zoom preview popover.
+    /// The zoom transform is applied in the view via scaleEffect to match PreviewView behavior.
+    @MainActor
+    func zoomPreviewFrame(
+        mediaItem: MediaItem,
+        sourceTimeMs: UInt64
+    ) async -> NSImage? {
+        let key = ThumbnailKey(mediaItemId: mediaItem.id, sourceTimeMs: sourceTimeMs)
+        if let cached = zoomPreviewCache[key] { return cached }
+
+        let generator = zoomImageGenerator(for: mediaItem)
+        let cmTime = CMTime(value: Int64(sourceTimeMs), timescale: 1000)
+
+        let cgImage: CGImage
+        do {
+            cgImage = try generator.copyCGImage(at: cmTime, actualTime: nil)
+        } catch {
+            return nil
+        }
+
+        let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        // Keep cache small — only hold a few recent frames
+        if zoomPreviewCache.count > 10 {
+            zoomPreviewCache.removeAll()
+        }
+        zoomPreviewCache[key] = nsImage
+        return nsImage
     }
 
     // MARK: - Internals
@@ -150,6 +186,21 @@ import AVFoundation
         generator.requestedTimeToleranceBefore = CMTime(seconds: 0.5, preferredTimescale: 600)
         generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
         generatorCache[mediaItem.id] = generator
+        return generator
+    }
+
+    @MainActor
+    private func zoomImageGenerator(for mediaItem: MediaItem) -> AVAssetImageGenerator {
+        if let existing = zoomGeneratorCache[mediaItem.id] {
+            return existing
+        }
+        let asset = AVURLAsset(url: mediaItem.fileURL)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.maximumSize = zoomPreviewSize
+        generator.appliesPreferredTrackTransform = true
+        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.1, preferredTimescale: 600)
+        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.1, preferredTimescale: 600)
+        zoomGeneratorCache[mediaItem.id] = generator
         return generator
     }
 

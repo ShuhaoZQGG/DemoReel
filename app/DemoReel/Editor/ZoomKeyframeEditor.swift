@@ -22,7 +22,15 @@ struct ZoomClipTrack: View {
     var onScissorCut: ((UInt64) -> Void)? = nil
     var snapTargets: [SnapEngine.SnapTarget] = []
     var snappingEnabled: Bool = false
+    var thumbnailCache: ThumbnailCache
     @Binding var activeSnapLineMs: UInt64?
+
+    @State private var previewClipId: UUID? = nil
+    @State private var previewImage: NSImage? = nil
+    @State private var previewZoomClip: ZoomClip? = nil
+    @State private var previewVideoWidth: Double = 0
+    @State private var previewVideoHeight: Double = 0
+    @State private var previewTask: Task<Void, Never>? = nil
 
     @State private var draggingId: UUID?
     @State private var dragOffset: Double = 0
@@ -96,27 +104,45 @@ struct ZoomClipTrack: View {
                         if location.x < edgeHitZone {
                             hoveredEdge = .leftEdge(zc.id)
                             NSCursor.resizeLeftRight.set()
+                            cancelPreview()
                         } else if location.x > clipWidth - edgeHitZone {
                             hoveredEdge = .rightEdge(zc.id)
                             NSCursor.resizeLeftRight.set()
+                            cancelPreview()
                         } else if zc.easeEnabled && abs(location.x - easeInWidth) < easeEdgeHitZone {
                             hoveredEdge = .easeInEdge(zc.id)
                             NSCursor.resizeLeftRight.set()
+                            cancelPreview()
                         } else if zc.easeEnabled && abs(location.x - (clipWidth - easeOutWidth)) < easeEdgeHitZone {
                             hoveredEdge = .easeOutEdge(zc.id)
                             NSCursor.resizeLeftRight.set()
+                            cancelPreview()
                         } else {
                             hoveredEdge = .none
                             NSCursor.arrow.set()
+                            if !scissorModeActive {
+                                startPreviewTimer(for: zc)
+                            }
                         }
                     case .ended:
                         if hoveredEdge != .none {
                             hoveredEdge = .none
                             NSCursor.arrow.set()
                         }
+                        cancelPreview()
                     @unknown default:
                         break
                     }
+                }
+                .popover(isPresented: Binding(get: { previewClipId == zc.id }, set: { if !$0 { cancelPreview() } }), arrowEdge: .top) {
+                    ZoomPreviewPopover(
+                        image: previewImage,
+                        scale: zc.scale,
+                        centerX: zc.centerX,
+                        centerY: zc.centerY,
+                        videoWidth: previewVideoWidth,
+                        videoHeight: previewVideoHeight
+                    )
                 }
                 .onTapGesture {
                     if scissorModeActive, let cut = onScissorCut, let posMs = hoverTimelinePositionMs {
@@ -129,6 +155,7 @@ struct ZoomClipTrack: View {
                 .highPriorityGesture(
                     DragGesture(minimumDistance: 3)
                         .onChanged { value in
+                            cancelPreview()
                             if gestureMode == nil {
                                 // First event: detect edge zones immediately, center zone defers
                                 let localX = value.startLocation.x
@@ -303,6 +330,45 @@ struct ZoomClipTrack: View {
             onResizeEaseOut(id, clamped)
         }
     }
+
+    // MARK: - Zoom Preview
+
+    private func startPreviewTimer(for zc: ZoomClip) {
+        let alreadyShowing = previewClipId == zc.id
+        previewTask?.cancel()
+        previewTask = Task {
+            // 300ms delay for initial show, 100ms debounce for position updates
+            try? await Task.sleep(for: .milliseconds(alreadyShowing ? 100 : 300))
+            guard !Task.isCancelled else { return }
+
+            // Use the actual hover position; fall back to clip midpoint
+            let posMs = hoverTimelinePositionMs ?? (zc.timelineStartMs + zc.durationMs / 2)
+            let posSec = Double(posMs) / 1000.0
+            guard let source = clipManager.sourceTimeForTimelinePosition(posSec),
+                  let mediaItemId = source.mediaItemId,
+                  let mediaItem = clipManager.mediaItems.first(where: { $0.id == mediaItemId })
+            else { return }
+
+            let image = await thumbnailCache.zoomPreviewFrame(
+                mediaItem: mediaItem,
+                sourceTimeMs: source.sourceTimeMs
+            )
+            guard !Task.isCancelled else { return }
+            previewImage = image
+            previewZoomClip = zc
+            previewVideoWidth = mediaItem.width
+            previewVideoHeight = mediaItem.height
+            previewClipId = zc.id
+        }
+    }
+
+    private func cancelPreview() {
+        previewTask?.cancel()
+        previewTask = nil
+        previewClipId = nil
+        previewImage = nil
+        previewZoomClip = nil
+    }
 }
 
 /// Renders a single zoom clip as a styled rounded rectangle with optional ease-in/out regions.
@@ -435,5 +501,49 @@ struct ZoomClipView: View {
         if isMagneted { return Color.purple }
         if isSelected { return Color.purple }
         return Color.blue.opacity(0.5)
+    }
+}
+
+/// Small popover showing a zoom-transformed video frame for quick preview.
+/// Applies the same scaleEffect + anchor approach as PreviewView.
+struct ZoomPreviewPopover: View {
+    let image: NSImage?
+    let scale: Double
+    let centerX: Double
+    let centerY: Double
+    let videoWidth: Double
+    let videoHeight: Double
+
+    private var anchor: UnitPoint {
+        guard videoWidth > 0, videoHeight > 0 else { return .center }
+        let ax = (centerX / videoWidth).clamped(to: 0...1)
+        let ay = (centerY / videoHeight).clamped(to: 0...1)
+        return UnitPoint(x: ax, y: ay)
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            Group {
+                if let image {
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .scaleEffect(scale, anchor: anchor)
+                } else {
+                    ProgressView()
+                }
+            }
+            .frame(width: 200, height: 120)
+            .clipped()
+
+            Text(String(format: "%.1fx", scale))
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 3))
+                .padding(4)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
