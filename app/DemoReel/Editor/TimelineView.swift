@@ -95,6 +95,7 @@ struct TimelineView: View {
     var onPlaceZoom: (UInt64) -> Void
     var thumbnailCache: ThumbnailCache
     var waveformCache: WaveformCache
+    var flashingClipIds: Set<UUID> = []
     @State private var hoverTimelinePosition: Double? = nil
     @State private var hoveredVideoClipId: UUID? = nil
     @State private var hoveredZoomClipId: UUID? = nil
@@ -525,6 +526,7 @@ struct TimelineView: View {
                     magnetedZoomClipIds: magnetedIdsForZoom,
                     hoveredZoomClipId: hoveredTrack == .zoom ? hoveredZoomClipId : nil,
                     scissorModeActive: scissorModeActive,
+                    flashingClipIds: flashingClipIds,
                     onSelect: { id, isCmd in handleZoomSelect(id: id, isCmd: isCmd) },
                     onDragMove: { id, ms in
                         clipManager.moveZoomClipOnTimeline(clipId: id, toTimelineMs: ms)

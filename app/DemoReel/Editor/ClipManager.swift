@@ -245,7 +245,8 @@ final class ClipManager {
                 scale: zc.scale,
                 easeInMs: zc.easeInMs,
                 easeOutMs: zc.easeOutMs,
-                easeEnabled: zc.easeEnabled
+                easeEnabled: zc.easeEnabled,
+                easingCurve: zc.easingCurve
             )
             newIds.append(newClip.id)
             zoomClips.append(newClip)
@@ -281,6 +282,79 @@ final class ClipManager {
     // MARK: - Zoom Clips
 
     var zoomClips: [ZoomClip] = []
+
+    /// Internal clipboard for zoom clip copy/paste. Stored with relative timing (first clip starts at 0).
+    var copiedZoomClips: [ZoomClip]?
+
+    /// Deep-copy selected zoom clips into internal clipboard with relative timing.
+    func copyZoomClips(ids: Set<UUID>) {
+        let selected = zoomClips
+            .filter { ids.contains($0.id) }
+            .sorted { $0.timelineStartMs < $1.timelineStartMs }
+        guard !selected.isEmpty else { return }
+
+        let baseTime = selected[0].timelineStartMs
+        copiedZoomClips = selected.map { zc in
+            ZoomClip(
+                timelineStartMs: zc.timelineStartMs - baseTime,
+                durationMs: zc.durationMs,
+                centerX: zc.centerX,
+                centerY: zc.centerY,
+                scale: zc.scale,
+                easeInMs: zc.easeInMs,
+                easeOutMs: zc.easeOutMs,
+                easeEnabled: zc.easeEnabled,
+                easingCurve: zc.easingCurve
+            )
+        }
+    }
+
+    /// Paste copied zoom clips at the given timeline position, generating new UUIDs.
+    /// Shifts clips forward if they would overlap existing zoom clips.
+    @discardableResult
+    func pasteZoomClips(atTimelineMs insertMs: UInt64) -> [UUID] {
+        guard let templates = copiedZoomClips, !templates.isEmpty else { return [] }
+        saveUndoState()
+
+        var candidates = templates.map { zc in
+            ZoomClip(
+                timelineStartMs: zc.timelineStartMs + insertMs,
+                durationMs: zc.durationMs,
+                centerX: zc.centerX,
+                centerY: zc.centerY,
+                scale: zc.scale,
+                easeInMs: zc.easeInMs,
+                easeOutMs: zc.easeOutMs,
+                easeEnabled: zc.easeEnabled,
+                easingCurve: zc.easingCurve
+            )
+        }
+
+        // Shift entire paste group forward until no overlaps with existing clips
+        for _ in 0..<100 {
+            let groupStart = candidates.map(\.timelineStartMs).min()!
+            let groupEnd = candidates.map(\.timelineEndMs).max()!
+
+            var maxOverlapEnd: UInt64? = nil
+            for existing in zoomClips {
+                if groupStart < existing.timelineEndMs && groupEnd > existing.timelineStartMs {
+                    if maxOverlapEnd == nil || existing.timelineEndMs > maxOverlapEnd! {
+                        maxOverlapEnd = existing.timelineEndMs
+                    }
+                }
+            }
+
+            guard let shiftTo = maxOverlapEnd else { break }
+            let delta = shiftTo - groupStart
+            for i in candidates.indices {
+                candidates[i].timelineStartMs += delta
+            }
+        }
+
+        let newIds = candidates.map(\.id)
+        zoomClips.append(contentsOf: candidates)
+        return newIds
+    }
 
     /// Add a new zoom clip at the given timeline position. Overlapping clips are allowed.
     func addZoomClip(atTimelineMs ms: UInt64, durationMs: UInt64 = 1000, centerX: Double = 0.5, centerY: Double = 0.5, scale: Double = 2.0) {

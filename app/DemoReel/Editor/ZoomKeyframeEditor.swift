@@ -11,6 +11,7 @@ struct ZoomClipTrack: View {
     let magnetedZoomClipIds: Set<UUID>
     var hoveredZoomClipId: UUID? = nil
     var scissorModeActive: Bool = false
+    var flashingClipIds: Set<UUID> = []
     var onSelect: (UUID, Bool) -> Void
     var onDragMove: (UUID, UInt64) -> Void
     var onResizeLeft: (UUID, UInt64) -> Void
@@ -89,6 +90,7 @@ struct ZoomClipTrack: View {
                     easeOutEdgeHighlighted: hoveredEdge == .easeOutEdge(zc.id),
                     easeInResizeOffset: easeInResizeVisualOffset(for: zc),
                     easeOutResizeOffset: easeOutResizeVisualOffset(for: zc),
+                    isFlashing: flashingClipIds.contains(zc.id),
                     isScaleDragging: gestureMode == .verticalScale(zc.id),
                     liveScale: gestureMode == .verticalScale(zc.id) ? liveScale : nil
                 )
@@ -384,6 +386,7 @@ struct ZoomClipView: View {
     var easeOutEdgeHighlighted: Bool = false
     var easeInResizeOffset: Double = 0
     var easeOutResizeOffset: Double = 0
+    var isFlashing: Bool = false
     var isScaleDragging: Bool = false
     var liveScale: Double? = nil
 
@@ -487,9 +490,11 @@ struct ZoomClipView: View {
             }
         }
         .frame(width: width, height: 24)
+        .animation(.easeOut(duration: 0.5), value: isFlashing)
     }
 
     private var fillColor: Color {
+        if isFlashing { return Color.green.opacity(0.35) }
         if isHovered { return Color.orange.opacity(0.2) }
         if isMagneted { return Color.purple.opacity(0.25) }
         if isSelected { return Color.purple.opacity(0.2) }
@@ -497,6 +502,7 @@ struct ZoomClipView: View {
     }
 
     private var borderColor: Color {
+        if isFlashing { return Color.green }
         if isHovered { return Color.orange }
         if isMagneted { return Color.purple }
         if isSelected { return Color.purple }

@@ -28,6 +28,7 @@ struct EditorView: View {
     @State private var activeVideoURL: URL?
     @State private var thumbnailCache = ThumbnailCache()
     @State private var waveformCache = WaveformCache()
+    @State private var flashingClipIds: Set<UUID> = []
 
     enum SidebarTab: String, CaseIterable {
         case media = "Media"
@@ -88,7 +89,8 @@ struct EditorView: View {
                     zoomPlacementScale: zoomConfig.scale,
                     onPlaceZoom: { ms in placeZoomClip(atTimelineMs: ms) },
                     thumbnailCache: thumbnailCache,
-                    waveformCache: waveformCache
+                    waveformCache: waveformCache,
+                    flashingClipIds: flashingClipIds
                 )
                 .frame(height: 200)
             }
@@ -436,6 +438,10 @@ struct EditorView: View {
             nudgeSelectedZoomPosition(deltaMs: deltaMs)
         case .duplicateSelection:
             duplicateSelected()
+        case .copySelection:
+            copySelected()
+        case .pasteSelection:
+            pasteAtPlayhead()
         case .selectNextZoom:
             selectAdjacentZoom(forward: true)
         case .selectPreviousZoom:
@@ -496,6 +502,28 @@ struct EditorView: View {
             }
         default:
             break
+        }
+    }
+
+    private func copySelected() {
+        switch selection {
+        case .zoomClips(let ids):
+            clipManager.copyZoomClips(ids: ids)
+        default:
+            break
+        }
+    }
+
+    private func pasteAtPlayhead() {
+        let playheadMs = UInt64(timelinePosition * 1000)
+        let newIds = clipManager.pasteZoomClips(atTimelineMs: playheadMs)
+        guard !newIds.isEmpty else { return }
+
+        selection = .zoomClips(Set(newIds))
+
+        flashingClipIds = Set(newIds)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            flashingClipIds = []
         }
     }
 

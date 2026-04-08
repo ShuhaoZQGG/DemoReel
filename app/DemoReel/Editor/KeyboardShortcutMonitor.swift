@@ -29,6 +29,8 @@ final class KeyboardShortcutMonitor {
         case adjustZoomScale(delta: Double)
         case nudgeZoomPosition(deltaMs: Int64)
         case duplicateSelection
+        case copySelection
+        case pasteSelection
         case selectNextZoom
         case selectPreviousZoom
     }
@@ -70,6 +72,14 @@ final class KeyboardShortcutMonitor {
                 }
                 if chars == "d" && flags == .command {
                     self.lastAction = ActionEvent(action: .duplicateSelection)
+                    return nil
+                }
+                if chars == "c" && flags == .command {
+                    self.lastAction = ActionEvent(action: .copySelection)
+                    return nil
+                }
+                if chars == "v" && flags == .command {
+                    self.lastAction = ActionEvent(action: .pasteSelection)
                     return nil
                 }
             }
